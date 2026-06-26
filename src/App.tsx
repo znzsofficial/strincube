@@ -606,7 +606,7 @@ export function App() {
               </div>
               <div className="world-settings-actions">
                 <button type="button" className="start-button" onClick={confirmStartNewWorld}>
-                  创建并进入
+                  <iconify-icon icon="lucide:play" width="16"></iconify-icon> 创建并进入
                 </button>
                 <button type="button" className="back-button" onClick={() => setShowWorldSettings(false)}>
                   返回
@@ -624,8 +624,8 @@ export function App() {
                         <small>{new Date(meta.savedAt).toLocaleString()}</small>
                       </div>
                       <div className="world-select-actions">
-                        <button type="button" className="world-play-btn" onClick={() => loadGameFromId(meta.id)}>进入世界</button>
-                        <button type="button" className="world-delete-btn" onClick={() => { if (confirm('确定删除此存档？')) deleteSave(meta.id); }}>删除</button>
+                        <button type="button" className="world-play-btn" onClick={() => loadGameFromId(meta.id)}><iconify-icon icon="lucide:play" width="14"></iconify-icon> 进入世界</button>
+                        <button type="button" className="world-delete-btn" onClick={() => { if (confirm('确定删除此存档？')) deleteSave(meta.id); }}><iconify-icon icon="lucide:trash-2" width="14"></iconify-icon> 删除</button>
                       </div>
                     </div>
                   ))
@@ -634,20 +634,20 @@ export function App() {
                 )}
               </div>
               <button type="button" className="start-button" onClick={startNewWorld}>
-                创建新世界
+                <iconify-icon icon="lucide:plus" width="18"></iconify-icon> 创建新世界
               </button>
               <div className="title-controls">
                 <div className="title-controls-row">
                   <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
-                  <span>移动</span>
+                  <span><iconify-icon icon="lucide:move" width="12"></iconify-icon> 移动</span>
                 </div>
                 <div className="title-controls-row">
                   <kbd>空格</kbd>
-                  <span>跳跃</span>
+                  <span><iconify-icon icon="lucide:arrow-up" width="12"></iconify-icon> 跳跃</span>
                 </div>
                 <div className="title-controls-row">
                   <kbd>鼠标</kbd>
-                  <span>挖掘 / 放置</span>
+                  <span><iconify-icon icon="lucide:mouse-pointer-click" width="12"></iconify-icon> 挖掘 / 放置</span>
                 </div>
               </div>
             </>
@@ -703,7 +703,7 @@ export function App() {
           onLook={(dx, dy) => gameRef.current?.setTouchLook(dx, dy)}
           onTap={(x, y) => gameRef.current?.touchTap(x, y)}
           onPlace={(x, y) => gameRef.current?.touchPlace(x, y)}
-          onPause={() => { lockIntentRef.current = false; gameRef.current?.unlockControls(); setOverlayState('menu'); }}
+          onPause={() => { lockIntentRef.current = false; gameRef.current?.unlockControls(); setOverlayState('menu'); setSnapshot(s => ({ ...s, isLocked: false })); }}
         />
       )}
 
@@ -719,14 +719,14 @@ export function App() {
             } else {
               gameRef.current?.lockControls()?.catch?.(() => {});
             }
-          }}>回到游戏</button>
-          <button type="button" onClick={() => openOverlayPanel('inventory')}>背包</button>
-          <button type="button" onClick={() => openOverlayPanel('settings')}>设置</button>
-          <button type="button" onClick={saveGame}>保存游戏</button>
+          }}><iconify-icon icon="lucide:play" width="16"></iconify-icon> 回到游戏</button>
+          <button type="button" onClick={() => openOverlayPanel('inventory')}><iconify-icon icon="lucide:package" width="16"></iconify-icon> 背包</button>
+          <button type="button" onClick={() => openOverlayPanel('settings')}><iconify-icon icon="lucide:settings" width="16"></iconify-icon> 设置</button>
+          <button type="button" onClick={saveGame}><iconify-icon icon="lucide:save" width="16"></iconify-icon> 保存游戏</button>
           {saveStatus && <p className="save-status">{saveStatus}</p>}
-          <button type="button" onClick={() => openFilePicker(fileInputRef.current)}>导入模型</button>
-          <button type="button" onClick={() => openFilePicker(folderInputRef.current)}>导入 MMD 文件夹</button>
-          <button type="button" className="back-button" onClick={returnToTitle}>返回主菜单</button>
+          <button type="button" onClick={() => openFilePicker(fileInputRef.current)}><iconify-icon icon="lucide:upload" width="16"></iconify-icon> 导入模型</button>
+          <button type="button" onClick={() => openFilePicker(folderInputRef.current)}><iconify-icon icon="lucide:folder-open" width="16"></iconify-icon> 导入 MMD 文件夹</button>
+          <button type="button" className="back-button" onClick={returnToTitle}><iconify-icon icon="lucide:log-out" width="16"></iconify-icon> 返回主菜单</button>
           <p>Esc 菜单，E 背包，O 设置，M 导入模型，选中模型后靠近按 F</p>
         </section>
       )}
