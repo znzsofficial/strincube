@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {
   type BlockType,
   blockMaterials,
@@ -12,7 +11,6 @@ import {
   loadBlockTexture,
   createItemFrameTexture,
   waterMaterial,
-  pickPlant as pickPlantFromRegistry,
 } from './blocks';
 import {
   type GameSettings,
@@ -26,10 +24,55 @@ import {
   type ImportedModelItem,
   type ModelImportProgress,
   type ModelImportOptions,
+  type StoredModel,
+  type PlacedModelEntity,
   worldSizePresets,
   defaultWorldGenSettings,
 } from './types';
 import { serializeBlocks, deserializeBlocks } from './save';
+
+import type { ModelContext } from './models';
+import {
+  applyModelBrightness as _applyModelBrightness,
+  applyPlacedModelSettings as _applyPlacedModelSettings,
+  flashEntityMaterials as _flashEntityMaterials,
+  selectPlacedModel as _selectPlacedModel,
+  removeSelectedPlacedModel as _removeSelectedPlacedModel,
+  findPlacedModelFromObject as _findPlacedModelFromObject,
+  placeStoredModel as _placeStoredModel,
+  importGltfModel as _importGltfModel,
+  importMmdModel as _importMmdModel,
+  importModelFiles as _importModelFiles,
+  importModelFile as _importModelFile,
+  importVmdForSelectedModel as _importVmdForSelectedModel,
+  noteMmdSupport as _noteMmdSupport,
+  updateSelectedPlacedModel as _updateSelectedPlacedModel,
+  updateSelectedModelPart as _updateSelectedModelPart,
+  damagePlacedModel as _damagePlacedModel,
+} from './models';
+
+import type { WaterContext } from './water';
+import {
+  createWaterContext as _createWaterContext,
+  addSolidColumnY as _addSolidColumnY,
+  removeSolidColumnY as _removeSolidColumnY,
+  queueWaterUpdate as _queueWaterUpdate,
+  queueWaterNeighbors as _queueWaterNeighbors,
+  markWaterChunkDirty as _markWaterChunkDirty,
+  addWaterCell as _addWaterCell,
+  removeWaterCell as _removeWaterCell,
+  rebuildDirtyWaterChunks as _rebuildDirtyWaterChunks,
+  updateWater as _updateWater,
+  columnKeyOf as _columnKeyOf,
+} from './water';
+
+import type { WorldGenContext } from './worldgen';
+import {
+  seededNoise as _seededNoise,
+  terrainHeight as _terrainHeight,
+  generateWorld as _generateWorld,
+  spawnCreatures as _spawnCreatures,
+} from './worldgen';
 import destroyStage0Url from '../../assets/minecraft/textures/block/destroy_stage_0.png';
 import destroyStage1Url from '../../assets/minecraft/textures/block/destroy_stage_1.png';
 import destroyStage2Url from '../../assets/minecraft/textures/block/destroy_stage_2.png';
@@ -71,79 +114,10 @@ type GameRenderer = {
   init?: () => Promise<unknown>;
 };
 
-type Creature = {
-  root: THREE.Group;
-  phase: number;
-  home: THREE.Vector3;
-};
-
 type FallingBlockEntity = {
   mesh: THREE.Mesh;
   type: BlockType;
   velocityY: number;
-};
-
-type WaterCell = {
-  position: THREE.Vector3;
-  distance: number;
-  level: number;
-  source: boolean;
-};
-
-type BlockData = {
-  position: THREE.Vector3;
-  type: BlockType;
-  waterDistance?: number;
-};
-
-type StoredModel = ImportedModelItem & {
-  root: THREE.Object3D;
-  mmdModel?: MmdModelHandle;
-  scale: number;
-  materials: THREE.Material[];
-  previewSize: THREE.Vector3;
-  previewCenter: THREE.Vector3;
-};
-
-type PlacedModelEntity = {
-  id: string;
-  modelId: string;
-  name: string;
-  root: THREE.Object3D;
-  anchor: THREE.Vector3;
-  baseScale: number;
-  scale: number;
-  offset: THREE.Vector3;
-  brightness: number;
-  opacity: number;
-  visible: boolean;
-  shadows: boolean;
-  damageable: boolean;
-  health: number;
-  maxHealth: number;
-  hurtCooldown: number;
-  hurtFlash: number;
-  velocity: THREE.Vector3;
-  velocityY: number;
-  animation: PlacedModelSettings['animation'];
-  vmdName?: string;
-  vmdAnimation?: unknown;
-  mmdRuntime?: MmdRuntimeHandle;
-  mmdMesh?: THREE.SkinnedMesh;
-  vmdPlaying: boolean;
-  vmdTime: number;
-  animationSpeed: number;
-  animationDistance: number;
-  animationPhase: number;
-  animationTick: number;
-  materials: THREE.Material[];
-  parts: ModelPart[];
-  partByMaterial: Map<THREE.Material, ModelPart>;
-  _lastShadow?: boolean;
-};
-
-type ModelPart = ModelPartSettings & {
-  material: THREE.Material;
 };
 
 type PrimedTnt = {
@@ -151,27 +125,6 @@ type PrimedTnt = {
   position: THREE.Vector3;
   timer: number;
   flash: number;
-};
-
-type MmdModelHandle = {
-  root: THREE.Object3D;
-  mesh?: THREE.SkinnedMesh;
-  setAnimation?: (animation: unknown) => void;
-  update?: (seconds: number, options?: { physics?: boolean; ik?: boolean }) => unknown;
-};
-
-type MmdRuntimeHandle = {
-  setAnimation?: (animation: unknown, mesh: THREE.SkinnedMesh) => void;
-  tick?: (seconds: number, options?: { mesh?: THREE.Object3D; physics?: boolean; ik?: boolean }) => unknown;
-};
-
-type ChunkMesh = {
-  meshes: THREE.Mesh[];
-  faceBlockKeysByMesh: Map<THREE.Mesh, string[]>;
-};
-
-type WaterChunkMesh = {
-  mesh: THREE.Mesh;
 };
 
 const uiKeyCodes = new Set(['Escape', 'KeyE', 'KeyM', 'KeyO']);
@@ -289,138 +242,6 @@ export function getWorldSeed() {
   return worldSeed;
 }
 
-function seededNoise(x: number, y: number, z: number) {
-  return Math.abs(Math.sin((x + worldSeed) * 12.9898 + (y - worldSeed * 0.37) * 78.233 + (z + worldSeed * 0.61) * 37.719) * 43758.5453) % 1;
-}
-
-// 生物群系类型
-type Biome = 'plains' | 'forest' | 'jungle' | 'desert' | 'snow' | 'taiga' | 'savanna';
-
-// 生物群系配置
-const biomeConfig: Record<Biome, {
-  grassColor: number;
-  treeDensity: number;
-  treeTypes: ('oak' | 'jungle' | 'cherry' | 'spruce')[];
-  surfaceBlock: BlockType;
-  plantDensity: number;
-}> = {
-  plains: {
-    grassColor: 0x73b84a,
-    treeDensity: 0.992,
-    treeTypes: ['oak'],
-    surfaceBlock: 'grass',
-    plantDensity: 0.78,
-  },
-  forest: {
-    grassColor: 0x5a8f29,
-    treeDensity: 0.975,
-    treeTypes: ['oak', 'spruce'],
-    surfaceBlock: 'grass',
-    plantDensity: 0.65,
-  },
-  jungle: {
-    grassColor: 0x3a7a1a,
-    treeDensity: 0.96,
-    treeTypes: ['jungle'],
-    surfaceBlock: 'grass',
-    plantDensity: 0.55,
-  },
-  desert: {
-    grassColor: 0xc2a645,
-    treeDensity: 0.998,
-    treeTypes: [],
-    surfaceBlock: 'sand',
-    plantDensity: 0.95,
-  },
-  snow: {
-    grassColor: 0x8fb8a0,
-    treeDensity: 0.985,
-    treeTypes: ['spruce'],
-    surfaceBlock: 'snow',
-    plantDensity: 0.85,
-  },
-  taiga: {
-    grassColor: 0x6a9f4a,
-    treeDensity: 0.97,
-    treeTypes: ['spruce'],
-    surfaceBlock: 'grass',
-    plantDensity: 0.75,
-  },
-  savanna: {
-    grassColor: 0x9ab84a,
-    treeDensity: 0.988,
-    treeTypes: ['oak'],
-    surfaceBlock: 'grass',
-    plantDensity: 0.82,
-  },
-};
-
-function biomeNoise(x: number, z: number) {
-  // 使用多层低频噪声生成大范围生物群系
-  const nx = x / 80;  // 低频，大范围
-  const nz = z / 80;
-  return (
-    Math.sin(nx * 0.7 + worldSeed * 0.1) * 0.3 +
-    Math.sin(nz * 0.8 + worldSeed * 0.2) * 0.3 +
-    Math.sin((nx + nz) * 0.5 + worldSeed * 0.3) * 0.2 +
-    Math.sin(nx * 1.3 - nz * 0.9 + worldSeed * 0.4) * 0.2
-  ) * 0.5 + 0.5; // 归一化到 0-1
-}
-
-function moistureNoise(x: number, z: number) {
-  // 使用不同的低频噪声生成湿度
-  const nx = x / 60;
-  const nz = z / 60;
-  return (
-    Math.sin(nx * 0.9 - worldSeed * 0.15) * 0.3 +
-    Math.sin(nz * 0.6 + worldSeed * 0.25) * 0.3 +
-    Math.sin((nx - nz) * 0.7 + worldSeed * 0.35) * 0.2 +
-    Math.sin(nx * 1.1 + nz * 1.2 - worldSeed * 0.45) * 0.2
-  ) * 0.5 + 0.5; // 归一化到 0-1
-}
-
-function getBiome(x: number, z: number): Biome {
-  const temp = biomeNoise(x, z);
-  const moisture = moistureNoise(x, z);
-
-  // 温度和湿度决定生物群系
-  if (temp > 0.65) {
-    return moisture > 0.55 ? 'jungle' : 'desert';
-  }
-  if (temp > 0.5) {
-    return moisture > 0.6 ? 'forest' : moisture > 0.4 ? 'savanna' : 'plains';
-  }
-  if (temp > 0.35) {
-    return moisture > 0.5 ? 'taiga' : 'plains';
-  }
-  return 'snow';
-}
-
-function riverCenterX(z: number) {
-  const center = Math.sin((z + worldSeed) * 0.15) * 7 + Math.sin((z - worldSeed * 0.52) * 0.045 + 1.8) * 10;
-  return center;
-}
-
-function riverProfile(x: number, z: number) {
-  const center = riverCenterX(z);
-  const bend = riverCenterX(z + 1) - riverCenterX(z - 1);
-  const distance = Math.abs(x - center) / Math.max(1, Math.hypot(1, bend * 0.5));
-  const width = 3.2 + seededNoise(Math.floor(z / 7), 0, 3) * 1.7;
-  const bankWidth = width + 3.4 + seededNoise(Math.floor(z / 9), 0, 11) * 1.4;
-  const bed = distance < width;
-  const bank = distance < bankWidth;
-  const depth = bed ? 1 + Math.floor((1 - distance / width) * 2.6) : 0;
-  return { bed, bank, depth, bankBlend: THREE.MathUtils.clamp((bankWidth - distance) / Math.max(bankWidth - width, 0.1), 0, 1) };
-}
-
-function isRiverBed(x: number, z: number) {
-  return riverProfile(x, z).bed;
-}
-
-function isRiverBank(x: number, z: number) {
-  return riverProfile(x, z).bank;
-}
-
 const faceDefs = [
   { normal: new THREE.Vector3(1, 0, 0), corners: [[0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0.5]] },
   { normal: new THREE.Vector3(-1, 0, 0), corners: [[-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [-0.5, 0.5, -0.5], [-0.5, -0.5, -0.5]] },
@@ -500,15 +321,6 @@ function rounded(v: THREE.Vector3) {
   return new THREE.Vector3(Math.round(v.x), Math.round(v.y), Math.round(v.z));
 }
 
-function terrainHeight(x: number, z: number) {
-  return Math.floor(
-    1.5
-    + Math.sin((x + worldSeed) * 0.45) * 1.2
-    + Math.cos((z - worldSeed * 0.41) * 0.36) * 1.1
-    + Math.sin((x + z + worldSeed * 0.29) * 0.18) * 0.8,
-  );
-}
-
 export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot: GameSnapshot) => void, onModelMenuRequest?: () => void, options: BlockGameOptions = {}) {
   const { onProgress } = options;
   const worldGen = options.worldGen ?? defaultWorldGenSettings;
@@ -553,7 +365,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   const camera = new THREE.PerspectiveCamera(72, mount.clientWidth / mount.clientHeight, 0.1, 180);
   camera.rotation.order = 'YXZ';
-  camera.position.set(0, terrainHeight(0, 0) + playerHeight + 2, 7);
+  camera.position.set(0, _terrainHeight(worldSeed, 0, 0) + playerHeight + 2, 7);
 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
@@ -620,20 +432,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   moonSprite.scale.set(7, 7, 1);
   scene.add(moonSprite);
 
-  const blocks = new Map<string, BlockData>();
-  const waterCells = new Map<string, WaterCell>();
+  const blocks = new Map<string, { position: THREE.Vector3; type: BlockType }>();
   const blockLights = new Map<string, THREE.PointLight>();
   const itemFrameContents = new Map<string, BlockType>();
   const itemFrameMaterialCache = new Map<string, THREE.MeshLambertMaterial>();
-  const columnSolidY = new Map<string, Set<number>>();
-  const chunkMeshes = new Map<string, ChunkMesh>();
-  const waterChunkMeshes = new Map<string, WaterChunkMesh>();
-  const dirtyWaterChunks = new Set<string>();
-  const creatures: Creature[] = [];
+  const chunkMeshes = new Map<string, { meshes: THREE.Mesh[]; faceBlockKeysByMesh: Map<THREE.Mesh, string[]> }>();
+  const creatures: { root: THREE.Group; phase: number; home: THREE.Vector3 }[] = [];
   const fallingBlocks: FallingBlockEntity[] = [];
-  const waterKeys = new Set<string>();
-  const waterUpdates: string[] = [];
-  const queuedWaterUpdates = new Set<string>();
   const raycaster = new THREE.Raycaster();
   raycaster.far = 6;
 
@@ -668,7 +473,6 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let breakingProgress = 0;
   let cameraYaw = 0;
   let cameraPitch = 0;
-  let waterUpdateTimer = 0;
   let modelRaycastTimer = 0;
   let lastShadowUpdateX = 0;
   let lastShadowUpdateZ = 0;
@@ -710,7 +514,6 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const _colorZenithDay = new THREE.Color(0x69bdff);
   const _colorBottomDay = new THREE.Color(0x91ca71);
   const _colorBottomNight = new THREE.Color(0x172338);
-  const _colorHurtFlash = new THREE.Color(0xff3d3d);
   const _tempColor1 = new THREE.Color();
   const _tempColor2 = new THREE.Color();
   const _tempVec3 = new THREE.Vector3();
@@ -720,10 +523,30 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const _tempDirection = new THREE.Vector3();
   const _tempKnockback = new THREE.Vector3();
 
+  function updateSelectedModelHelper() {
+    // placeholder - logic removed, kept for compatibility
+  }
 
+  const modelCtx: ModelContext = {
+    scene,
+    settings,
+    gltfLoader,
+    importedModelMaterials,
+    storedModels,
+    placedModels,
+    placedModelRaycastRoots,
+    selectedPlacedModelId,
+    modelItemSequence,
+    placedModelSequence,
+    modelPlacementRotation,
+    modelPlacementScale,
+    emitSnapshot: () => emitSnapshot(),
+    updateSelectedModelHelper,
+    _colorHurtFlash: new THREE.Color(0xff4444),
+  };
 
-  function emitSnapshot(isLocked = controls.isLocked) {
-    const selectedPlacedModel = selectedPlacedModelId ? placedModels.get(selectedPlacedModelId) : null;
+  function emitSnapshot(isLocked = controls.isLocked || touchActive) {
+    const selectedPlacedModel = modelCtx.selectedPlacedModelId ? placedModels.get(modelCtx.selectedPlacedModelId) : null;
     const selectedStoredModel = selectedModelId ? storedModels.get(selectedModelId) : null;
     const canOpenModelMenu = Boolean(selectedPlacedModel && controls.object.position.distanceTo(selectedPlacedModel.root.position) <= 6.5);
     onSnapshot({
@@ -767,7 +590,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function isFallingBlock(type: BlockType) {
-    return type === 'sand' || type === 'gravel';
+    return type === 'sand' || type === 'gravel' || type === 'redSand';
   }
 
   function isReplaceableBlock(type: BlockType) {
@@ -779,239 +602,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     return !block || isReplaceableBlock(block.type);
   }
 
-  function columnKeyOf(x: number, z: number) {
-    return `${x},${z}`;
-  }
-
-  function addSolidColumnY(x: number, y: number, z: number) {
-    const columnKey = columnKeyOf(x, z);
-    let solidY = columnSolidY.get(columnKey);
-    if (!solidY) {
-      solidY = new Set<number>();
-      columnSolidY.set(columnKey, solidY);
-    }
-    solidY.add(y);
-  }
-
-  function removeSolidColumnY(x: number, y: number, z: number) {
-    const columnKey = columnKeyOf(x, z);
-    const solidY = columnSolidY.get(columnKey);
-    if (!solidY) return;
-    solidY.delete(y);
-    if (solidY.size === 0) columnSolidY.delete(columnKey);
-  }
-
-  function queueWaterUpdate(x: number, y: number, z: number) {
-    const key = keyOf(x, y, z);
-    if (queuedWaterUpdates.has(key)) return;
-    queuedWaterUpdates.add(key);
-    waterUpdates.push(key);
-  }
-
-  function queueWaterNeighbors(x: number, y: number, z: number) {
-    queueWaterUpdate(x, y, z);
-    queueWaterUpdate(x + 1, y, z);
-    queueWaterUpdate(x - 1, y, z);
-    queueWaterUpdate(x, y, z + 1);
-    queueWaterUpdate(x, y, z - 1);
-    queueWaterUpdate(x, y + 1, z);
-    queueWaterUpdate(x, y - 1, z);
-  }
-
-  function markWaterChunkDirty(x: number, z: number) {
-    dirtyWaterChunks.add(chunkKeyOf(x, z));
-    dirtyWaterChunks.add(chunkKeyOf(x - 1, z));
-    dirtyWaterChunks.add(chunkKeyOf(x + 1, z));
-    dirtyWaterChunks.add(chunkKeyOf(x, z - 1));
-    dirtyWaterChunks.add(chunkKeyOf(x, z + 1));
-  }
-
-  function removeWaterChunkMesh(chunkKey: string) {
-    const chunk = waterChunkMeshes.get(chunkKey);
-    if (!chunk) return;
-    scene.remove(chunk.mesh);
-    chunk.mesh.geometry.dispose();
-    waterChunkMeshes.delete(chunkKey);
-  }
-
-  function addWaterCell(x: number, y: number, z: number, distance = 0, level = 7, source = distance === 0 && level === 7) {
-    const key = keyOf(x, y, z);
-    if (blocks.has(key)) return;
-    const existing = waterCells.get(key);
-    if (existing && existing.level >= level && existing.distance <= distance && existing.source === source) return;
-    waterCells.set(key, { position: new THREE.Vector3(x, y, z), distance, level, source: existing?.source || source });
-    waterKeys.add(key);
-    queueWaterUpdate(x, y, z);
-    queueWaterNeighbors(x, y, z);
-    markWaterChunkDirty(x, z);
-  }
-
-  function removeWaterCell(x: number, y: number, z: number) {
-    const key = keyOf(x, y, z);
-    if (!waterCells.delete(key)) return;
-    waterKeys.delete(key);
-    queuedWaterUpdates.delete(key);
-    markWaterChunkDirty(x, z);
-    queueWaterNeighbors(x, y, z);
-  }
-
-  function rebuildWaterChunk(chunkKey: string) {
-    removeWaterChunkMesh(chunkKey);
-    const positions: number[] = [];
-    const normals: number[] = [];
-    const uvs: number[] = [];
-    const indices: number[] = [];
-    let vertexCount = 0;
-
-    const chunkCells: WaterCell[] = [];
-    for (const cell of waterCells.values()) {
-      if (chunkKeyOf(cell.position.x, cell.position.z) === chunkKey) {
-        chunkCells.push(cell);
-      }
-    }
-    if (chunkCells.length === 0) return;
-
-    function getWaterTopY(x: number, y: number, z: number): number | null {
-      const cell = waterCells.get(keyOf(x, y, z));
-      if (cell) return cell.position.y + THREE.MathUtils.lerp(-0.44, 0.48, cell.level / 7);
-      const below = waterCells.get(keyOf(x, y - 1, z));
-      if (below) return below.position.y + THREE.MathUtils.lerp(-0.44, 0.48, below.level / 7);
-      const above = waterCells.get(keyOf(x, y + 1, z));
-      if (above) return above.position.y + THREE.MathUtils.lerp(-0.44, 0.48, above.level / 7);
-      return null;
-    }
-
-    function blendedTopY(cell: WaterCell, cornerX: number, cornerZ: number) {
-      const cx = cell.position.x;
-      const cy = cell.position.y;
-      const cz = cell.position.z;
-      const sx = cornerX > 0 ? 1 : -1;
-      const sz = cornerZ > 0 ? 1 : -1;
-
-      const selfY = cell.position.y + THREE.MathUtils.lerp(-0.44, 0.48, cell.level / 7);
-
-      const neighborX = getWaterTopY(cx + sx, cy, cz);
-      const neighborZ = getWaterTopY(cx, cy, cz + sz);
-      const neighborXZ = getWaterTopY(cx + sx, cy, cz + sz);
-
-      let sum = selfY;
-      let count = 1;
-      if (neighborX !== null) { sum += neighborX; count++; }
-      if (neighborZ !== null) { sum += neighborZ; count++; }
-      if (neighborXZ !== null) { sum += neighborXZ; count++; }
-
-      return sum / count;
-    }
-
-    function waterTopY(cell: WaterCell) {
-      return cell.position.y + THREE.MathUtils.lerp(-0.44, 0.48, cell.level / 7);
-    }
-
-    function shouldRenderFace(nx: number, ny: number, nz: number): boolean {
-      if (waterCells.has(keyOf(nx, ny, nz))) return false;
-      const solid = blocks.get(keyOf(nx, ny, nz));
-      if (solid && !isPlantBlock(solid.type)) return false;
-      return true;
-    }
-
-    for (const cell of chunkCells) {
-      const cx = cell.position.x;
-      const cy = cell.position.y;
-      const cz = cell.position.z;
-
-      const selfTopY = waterTopY(cell);
-
-      for (const face of faceDefs) {
-        const nx = cx + face.normal.x;
-        const ny = cy + face.normal.y;
-        const nz = cz + face.normal.z;
-
-        if (!shouldRenderFace(nx, ny, nz)) continue;
-
-        const isTopFace = face.normal.y > 0;
-        const isBottomFace = face.normal.y < 0;
-
-        for (const corner of face.corners) {
-          let y: number;
-          if (isTopFace) {
-            y = blendedTopY(cell, corner[0], corner[2]);
-          } else if (isBottomFace) {
-            y = cy + corner[1];
-          } else {
-            y = corner[1] > 0 ? selfTopY : cy + corner[1];
-          }
-          positions.push(cx + corner[0], y, cz + corner[2]);
-          normals.push(face.normal.x, face.normal.y, face.normal.z);
-        }
-        uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
-        indices.push(vertexCount, vertexCount + 1, vertexCount + 2, vertexCount, vertexCount + 2, vertexCount + 3);
-        vertexCount += 4;
-      }
-
-      const sides = [
-        { dx: 1, dz: 0, corners: [[0.5, -0.5], [0.5, 0.5]] },
-        { dx: -1, dz: 0, corners: [[-0.5, -0.5], [-0.5, 0.5]] },
-        { dx: 0, dz: 1, corners: [[-0.5, 0.5], [0.5, 0.5]] },
-        { dx: 0, dz: -1, corners: [[-0.5, -0.5], [0.5, -0.5]] },
-      ];
-
-      for (const side of sides) {
-        const neighborCell = waterCells.get(keyOf(cx + side.dx, cy, cz + side.dz));
-        if (!neighborCell) continue;
-        const neighborTop = waterTopY(neighborCell);
-        if (Math.abs(neighborTop - selfTopY) < 0.01) continue;
-
-        const higherTop = Math.max(selfTopY, neighborTop);
-        const lowerTop = Math.min(selfTopY, neighborTop);
-
-        const isCurrentHigher = selfTopY >= neighborTop;
-        const normalX = isCurrentHigher ? side.dx : -side.dx;
-        const normalZ = isCurrentHigher ? side.dz : -side.dz;
-
-        const c0 = side.corners[0];
-        const c1 = side.corners[1];
-
-        positions.push(cx + c0[0], lowerTop, cz + c0[1]);
-        positions.push(cx + c0[0], higherTop, cz + c0[1]);
-        positions.push(cx + c1[0], higherTop, cz + c1[1]);
-        positions.push(cx + c1[0], lowerTop, cz + c1[1]);
-
-        normals.push(normalX, 0, normalZ);
-        normals.push(normalX, 0, normalZ);
-        normals.push(normalX, 0, normalZ);
-        normals.push(normalX, 0, normalZ);
-
-        uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
-        indices.push(vertexCount, vertexCount + 1, vertexCount + 2, vertexCount, vertexCount + 2, vertexCount + 3);
-        vertexCount += 4;
-      }
-    }
-
-    if (positions.length === 0) return;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geometry.setIndex(indices);
-    geometry.computeBoundingSphere();
-    const mesh = new THREE.Mesh(geometry, waterMaterial);
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    waterChunkMeshes.set(chunkKey, { mesh });
-  }
-
-  function rebuildDirtyWaterChunks(limit = 16) {
-    let count = 0;
-    for (const chunkKey of dirtyWaterChunks) {
-      dirtyWaterChunks.delete(chunkKey);
-      rebuildWaterChunk(chunkKey);
-      count += 1;
-      if (count >= limit) break;
-    }
-  }
+  const waterCtx: WaterContext = _createWaterContext(scene, waterMaterial, settings, chunkSize, maxWaterSpreadDistance, waterLevel, worldBottom, () => {});
+  waterCtx.blocks = blocks;
+  waterCtx.chunkMeshes = chunkMeshes;
+  waterCtx.visibleChunkRaycastMeshes = visibleChunkRaycastMeshes;
 
   function groundHeightAt(x: number, z: number, maxCameraY = Infinity) {
-    const solidY = columnSolidY.get(columnKeyOf(x, z));
+    const solidY = waterCtx.columnSolidY.get(_columnKeyOf(x, z));
     if (!solidY) return -Infinity;
 
     const maxBlockY = maxCameraY - playerHeight - 0.5;
@@ -1031,7 +628,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function setSelectedModel(modelId: string | null) {
     selectedModelId = modelId;
-    selectedPlacedModelId = null;
+    modelCtx.selectedPlacedModelId = null;
     updateSelectedModelHelper();
     // clearModelPreview() removed
     emitSnapshot();
@@ -1073,13 +670,14 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       }
     }
 
-    for (const [chunkKey, chunk] of waterChunkMeshes) {
+    for (const [chunkKey, chunk] of waterCtx.waterChunkMeshes) {
       const center = chunkCenterFromKey(chunkKey);
       chunk.mesh.visible = (center.x - player.x) ** 2 + (center.z - player.z) ** 2 <= visibleRadiusSq;
     }
 
     if (changed || visibleChunkRaycastDirty) {
       visibleChunkRaycastMeshes = [...chunkMeshes.values()].flatMap((chunk) => chunk.meshes.filter((mesh) => mesh.visible));
+      waterCtx.visibleChunkRaycastMeshes = visibleChunkRaycastMeshes;
       visibleChunkRaycastDirty = false;
     }
   }
@@ -1381,18 +979,18 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function addBlock(x: number, y: number, z: number, type: BlockType, waterDistance = 0) {
     if (type === 'water') {
-      addWaterCell(x, y, z, waterDistance);
+      _addWaterCell(waterCtx, x, y, z, waterDistance);
       return;
     }
 
     const key = keyOf(x, y, z);
     if (blocks.has(key)) return;
 
-    removeWaterCell(x, y, z);
+    _removeWaterCell(waterCtx, x, y, z);
     blocks.set(key, { position: new THREE.Vector3(x, y, z), type });
-    if (isSolidBlock(type)) addSolidColumnY(x, y, z);
+    if (isSolidBlock(type)) _addSolidColumnY(waterCtx, x, y, z);
     if (isFallingBlock(type)) queueFallingCheck(x, y, z);
-    queueWaterNeighbors(x, y, z);
+    _queueWaterNeighbors(waterCtx, x, y, z);
     if (blockMeshesReady) rebuildAroundBlock(x, z);
     addBlockLight(x, y, z, type);
   }
@@ -1402,13 +1000,15 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const block = blocks.get(key);
     if (!block) return null;
     blocks.delete(key);
-    if (isSolidBlock(block.type)) removeSolidColumnY(x, y, z);
-    queueWaterNeighbors(x, y, z);
+    if (isSolidBlock(block.type)) _removeSolidColumnY(waterCtx, x, y, z);
+    _queueWaterNeighbors(waterCtx, x, y, z);
     queueFallingNeighbors(x, y, z);
     if (rebuild) rebuildAroundBlock(x, z);
     removeBlockLight(x, block.position.y, z);
     return block;
   }
+
+  waterCtx.removeBlockAt = removeBlockAt;
 
   function createFallingMesh(type: BlockType) {
     const materialIndex = materialIndexFor(type, new THREE.Vector3(0, 1, 0));
@@ -1433,7 +1033,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     mesh.position.set(x, y, z);
     scene.add(mesh);
     primedTnts.push({ mesh, position: new THREE.Vector3(x, y, z), timer: fuse, flash: 0 });
-    queueWaterNeighbors(x, y, z);
+    _queueWaterNeighbors(waterCtx, x, y, z);
   }
 
   function spawnFallingBlock(x: number, y: number, z: number, type: BlockType) {
@@ -1525,211 +1125,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     }
   }
 
-  function buildTree(x: number, y: number, z: number) {
-    const trunkHeight = 4 + Math.floor(seededNoise(x, y, z) * 3);
-    for (let dy = 1; dy <= trunkHeight; dy += 1) addBlock(x, y + dy, z, 'wood');
-
-    for (let layer = -1; layer <= 2; layer += 1) {
-      const leafY = y + trunkHeight + layer;
-      const baseRadius = layer < 1 ? 2 : 1;
-
-      for (let dx = -baseRadius; dx <= baseRadius; dx += 1) {
-        for (let dz = -baseRadius; dz <= baseRadius; dz += 1) {
-          const distance = Math.abs(dx) + Math.abs(dz);
-          const cornerNoise = seededNoise(x + dx, leafY, z + dz);
-          const edgeLimit = baseRadius + (cornerNoise > 0.76 ? 1 : 0);
-          if (distance > edgeLimit || (distance === 0 && layer < 0)) continue;
-          if (distance >= baseRadius + 1 && cornerNoise < 0.9) continue;
-          addBlock(x + dx, leafY, z + dz, 'leaves');
-        }
-      }
-    }
-
-    addBlock(x, y + trunkHeight + 2, z, 'leaves');
-  }
-
-  function buildJungleTree(x: number, y: number, z: number) {
-    const trunkHeight = 6 + Math.floor(seededNoise(x, y, z) * 5);
-    for (let dy = 1; dy <= trunkHeight; dy += 1) addBlock(x, y + dy, z, 'jungleLog');
-
-    for (let layer = -2; layer <= 2; layer += 1) {
-      const leafY = y + trunkHeight + layer;
-      const baseRadius = layer < 0 ? 3 : 2;
-
-      for (let dx = -baseRadius; dx <= baseRadius; dx += 1) {
-        for (let dz = -baseRadius; dz <= baseRadius; dz += 1) {
-          const distance = Math.abs(dx) + Math.abs(dz);
-          const cornerNoise = seededNoise(x + dx, leafY, z + dz);
-          if (distance > baseRadius + (cornerNoise > 0.7 ? 1 : 0)) continue;
-          if (distance === 0 && layer < 0) continue;
-          addBlock(x + dx, leafY, z + dz, 'jungleLeaves');
-        }
-      }
-    }
-  }
-
-  function buildCherryTree(x: number, y: number, z: number) {
-    const trunkHeight = 4 + Math.floor(seededNoise(x, y, z) * 2);
-    for (let dy = 1; dy <= trunkHeight; dy += 1) addBlock(x, y + dy, z, 'cherryLog');
-
-    for (let layer = -1; layer <= 2; layer += 1) {
-      const leafY = y + trunkHeight + layer;
-      const baseRadius = layer < 1 ? 2 : 1;
-
-      for (let dx = -baseRadius; dx <= baseRadius; dx += 1) {
-        for (let dz = -baseRadius; dz <= baseRadius; dz += 1) {
-          const distance = Math.abs(dx) + Math.abs(dz);
-          if (distance > baseRadius + 1) continue;
-          if (distance === 0 && layer < 0) continue;
-          addBlock(x + dx, leafY, z + dz, 'cherryLeaves');
-        }
-      }
-    }
-  }
-
-  function buildSpruceTree(x: number, y: number, z: number) {
-    const trunkHeight = 5 + Math.floor(seededNoise(x, y, z) * 3);
-    for (let dy = 1; dy <= trunkHeight; dy += 1) addBlock(x, y + dy, z, 'spruceLog');
-
-    for (let layer = -1; layer <= trunkHeight; layer += 1) {
-      const leafY = y + trunkHeight + 2 - layer;
-      const radius = Math.max(0, Math.floor(layer / 2));
-
-      for (let dx = -radius; dx <= radius; dx += 1) {
-        for (let dz = -radius; dz <= radius; dz += 1) {
-          if (Math.abs(dx) + Math.abs(dz) > radius) continue;
-          if (dx === 0 && dz === 0 && layer < trunkHeight) continue;
-          addBlock(x + dx, leafY, z + dz, 'spruceLeaves');
-        }
-      }
-    }
-  }
-
-  function buildCactus(x: number, y: number, z: number) {
-    const height = 2 + Math.floor(seededNoise(x, y, z) * 3);
-    for (let dy = 1; dy <= height; dy += 1) addBlock(x, y + dy, z, 'cactus');
-  }
-
-  function buildPumpkinPatch(x: number, y: number, z: number) {
-    const count = 1 + Math.floor(seededNoise(x, y, z) * 3);
-    for (let i = 0; i < count; i += 1) {
-      const dx = Math.floor(seededNoise(x + i, y, z) * 3) - 1;
-      const dz = Math.floor(seededNoise(x, y, z + i) * 3) - 1;
-      addBlock(x + dx, y + 1, z + dz, 'pumpkin');
-    }
-  }
-
-  function buildMushroomCluster(x: number, y: number, z: number) {
-    const count = 2 + Math.floor(seededNoise(x, y, z) * 4);
-    for (let i = 0; i < count; i += 1) {
-      const dx = Math.floor(seededNoise(x + i, y, z) * 5) - 2;
-      const dz = Math.floor(seededNoise(x, y, z + i) * 5) - 2;
-      const type = seededNoise(x + i, y + 1, z + i) > 0.5 ? 'brownMushroom' : 'redMushroom';
-      addBlock(x + dx, y + 1, z + dz, type);
-    }
-  }
-
-  function buildRockFormation(x: number, y: number, z: number) {
-    const radius = 1 + Math.floor(seededNoise(x, y, z) * 2);
-    const height = 1 + Math.floor(seededNoise(x, y + 1, z) * 2);
-
-    for (let dy = 0; dy <= height; dy += 1) {
-      for (let dx = -radius; dx <= radius; dx += 1) {
-        for (let dz = -radius; dz <= radius; dz += 1) {
-          const distance = Math.abs(dx) + Math.abs(dz);
-          if (distance > radius + (seededNoise(x + dx, y + dy, z + dz) > 0.6 ? 1 : 0)) continue;
-          const type = dy === height ? 'cobblestone' : 'mossyCobblestone';
-          addBlock(x + dx, y + dy, z + dz, type);
-        }
-      }
-    }
-  }
-
-  function buildPond(x: number, y: number, z: number) {
-    const radius = 2 + Math.floor(seededNoise(x, y, z) * 2);
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      for (let dz = -radius; dz <= radius; dz += 1) {
-        const distance = Math.hypot(dx, dz);
-        if (distance > radius) continue;
-        if (distance > radius - 1.5) {
-          addBlock(x + dx, y, z + dz, 'clay');
-        } else {
-          addBlock(x + dx, y, z + dz, 'water', 0);
-        }
-      }
-    }
-  }
-
-  function buildSnowPile(x: number, y: number, z: number) {
-    const radius = 1 + Math.floor(seededNoise(x, y, z) * 2);
-    for (let dx = -radius; dx <= radius; dx += 1) {
-      for (let dz = -radius; dz <= radius; dz += 1) {
-        if (Math.abs(dx) + Math.abs(dz) > radius) continue;
-        addBlock(x + dx, y + 1, z + dz, 'snow');
-      }
-    }
-  }
-
-  function buildMineralVein(x: number, y: number, z: number, type: BlockType) {
-    const size = 2 + Math.floor(seededNoise(x, y, z) * 3);
-    for (let dx = 0; dx < size; dx += 1) {
-      for (let dy = 0; dy < size; dy += 1) {
-        for (let dz = 0; dz < size; dz += 1) {
-          if (seededNoise(x + dx, y + dy, z + dz) > 0.6) {
-            addBlock(x + dx, y + dy, z + dz, type);
-          }
-        }
-      }
-    }
-  }
-
-  function addVegetation(x: number, y: number, z: number) {
-    if (isRiverBed(x, z) || seededNoise(x, y, z) < 0.58) return;
-    const plant = isRiverBank(x, z) && seededNoise(x, y, z + 23) > 0.72 ? 'fern' : pickPlantFromRegistry(x, y, z, seededNoise);
-    addBlock(x, y + 1, z, plant);
-  }
-
-  function createCreature(x: number, z: number) {
-    const h = terrainHeight(x, z) + 1;
-    const root = new THREE.Group();
-    root.position.set(x, h, z);
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.5, 0.9), new THREE.MeshLambertMaterial({ color: 0xffd56f }));
-    body.position.y = 0.38;
-    body.castShadow = true;
-    root.add(body);
-
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.48, 0.52), new THREE.MeshLambertMaterial({ color: 0xffe29a }));
-    head.position.set(0, 0.77, -0.28);
-    head.castShadow = true;
-    root.add(head);
-
-    const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x392d38 });
-    const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.03), eyeMaterial);
-    leftEye.position.set(-0.13, 0.82, -0.55);
-    root.add(leftEye);
-    const rightEye = leftEye.clone();
-    rightEye.position.x = 0.13;
-    root.add(rightEye);
-
-    scene.add(root);
-    creatures.push({ root, phase: Math.random() * Math.PI * 2, home: root.position.clone() });
-  }
-
-  function spawnCreatures() {
-    createCreature(-6, -5);
-    createCreature(5, -8);
-    createCreature(8, 4);
-    createCreature(-9, 6);
-  }
-
   function settleInitialFallingBlocks() {
     const candidates = [...blocks.values()].filter((block) => isFallingBlock(block.type));
     for (const block of candidates) queueFallingCheck(block.position.x, block.position.y, block.position.z);
   }
 
   function queueInitialWater() {
-    for (const cell of waterCells.values()) queueWaterUpdate(cell.position.x, cell.position.y, cell.position.z);
+    for (const cell of waterCtx.waterCells.values()) _queueWaterUpdate(waterCtx, cell.position.x, cell.position.y, cell.position.z);
   }
 
   function updateModelPreview(hit: THREE.Intersection | null) {
@@ -1804,7 +1206,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const player = controls.object.position;
     if (target.distanceTo(player) < 1.45) return;
     if (selectedModelId) {
-      placeStoredModel(selectedModelId, new THREE.Vector3(target.x + 0.5, target.y - 0.5, target.z + 0.5));
+      _placeStoredModel(modelCtx, selectedModelId, new THREE.Vector3(target.x + 0.5, target.y - 0.5, target.z + 0.5));
       return;
     }
     addBlock(target.x, target.y, target.z, selectedBlock);
@@ -1910,7 +1312,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       const newZ = creature.home.z + Math.cos(t * 0.8) * 1.2;
       creature.root.position.x = newX;
       creature.root.position.z = newZ;
-      creature.root.position.y = terrainHeight(Math.round(newX), Math.round(newZ)) + 1 + Math.sin(t * 4) * 0.04;
+      creature.root.position.y = _terrainHeight(worldSeed, Math.round(newX), Math.round(newZ)) + 1 + Math.sin(t * 4) * 0.04;
       creature.root.rotation.y = Math.atan2(Math.cos(t), Math.sin(t * 0.8));
     }
   }
@@ -1919,13 +1321,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const x = Math.round(position.x);
     const y = Math.round(position.y);
     const z = Math.round(position.z);
-    const current = waterCells.get(keyOf(x, y, z)) ?? waterCells.get(keyOf(x, y - 1, z)) ?? waterCells.get(keyOf(x, y + 1, z));
+    const current = waterCtx.waterCells.get(keyOf(x, y, z)) ?? waterCtx.waterCells.get(keyOf(x, y - 1, z)) ?? waterCtx.waterCells.get(keyOf(x, y + 1, z));
     if (!current) return _tempFlow.set(0, 0, 0);
 
     _tempFlow.set(0, 0, 0);
     const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     for (const [dx, dz] of directions) {
-      const neighbor = waterCells.get(keyOf(x + dx, current.position.y, z + dz));
+      const neighbor = waterCtx.waterCells.get(keyOf(x + dx, current.position.y, z + dz));
       if (neighbor) {
         const levelDelta = current.level - neighbor.level;
         if (levelDelta >= 0) {
@@ -1971,7 +1373,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         entity.velocity.y += entity.velocityY;
         entity.velocityY -= 28 * delta;
         entity.anchor.add(entity.velocity.clone().multiplyScalar(delta));
-        const groundY = terrainHeight(Math.round(entity.anchor.x), Math.round(entity.anchor.z)) + 0.5;
+        const groundY = _terrainHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z)) + 0.5;
         if (entity.anchor.y < groundY) {
           entity.anchor.y = groundY;
           entity.velocityY = 0;
@@ -2038,7 +1440,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         for (let z = minZ; z <= maxZ; z += 1) {
           _tempVec3.set(x, y, z);
           const distance = center.distanceTo(_tempVec3);
-          if (distance > radius + seededNoise(x, y, z) * 0.8) continue;
+          if (distance > radius + _seededNoise(worldSeed, x, y, z) * 0.8) continue;
           const block = blocks.get(keyOf(x, y, z));
           if (!block || block.type === 'bedrock') continue;
           if (block.type === 'tnt') {
@@ -2056,8 +1458,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       const block = blocks.get(key);
       if (!block) continue;
       blocks.delete(key);
-      if (isSolidBlock(block.type)) removeSolidColumnY(x, y, z);
-      queueWaterNeighbors(x, y, z);
+      if (isSolidBlock(block.type)) _removeSolidColumnY(waterCtx, x, y, z);
+      _queueWaterNeighbors(waterCtx, x, y, z);
       affectedChunks.add(chunkKeyOf(x, z));
     }
 
@@ -2116,131 +1518,6 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     }
   }
 
-  function flowWaterFrom(block: WaterCell) {
-    const { x, y, z } = block.position;
-    const distance = block.distance;
-    let level = block.level;
-    if (y <= worldBottom + 1) return;
-
-    if (!block.source) {
-      let suppliedLevel = 0;
-      const aboveKey = keyOf(x, y + 1, z);
-      const above = waterCells.get(aboveKey);
-      if (above) suppliedLevel = 7;
-
-      const xPlus = waterCells.get(keyOf(x + 1, y, z));
-      const xMinus = waterCells.get(keyOf(x - 1, y, z));
-      const zPlus = waterCells.get(keyOf(x, y, z + 1));
-      const zMinus = waterCells.get(keyOf(x, y, z - 1));
-
-      if (xPlus) suppliedLevel = Math.max(suppliedLevel, xPlus.source ? 6 : xPlus.level - 1);
-      if (xMinus) suppliedLevel = Math.max(suppliedLevel, xMinus.source ? 6 : xMinus.level - 1);
-      if (zPlus) suppliedLevel = Math.max(suppliedLevel, zPlus.source ? 6 : zPlus.level - 1);
-      if (zMinus) suppliedLevel = Math.max(suppliedLevel, zMinus.source ? 6 : zMinus.level - 1);
-
-      if (suppliedLevel <= 0) {
-        removeWaterCell(x, y, z);
-        return;
-      }
-
-      const nextLevel = Math.min(level, suppliedLevel);
-      if (nextLevel < level) {
-        block.level = nextLevel;
-        level = nextLevel;
-        markWaterChunkDirty(x, z);
-        queueWaterNeighbors(x, y, z);
-      }
-    }
-
-    const belowKey = keyOf(x, y - 1, z);
-    const below = blocks.get(belowKey);
-    const belowWater = waterCells.get(belowKey);
-    if (!belowWater && (!below || isPlantBlock(below.type))) {
-      if (below && isPlantBlock(below.type)) removeBlockAt(x, y - 1, z, false);
-      addWaterCell(x, y - 1, z, 0, 7, false);
-      return;
-    }
-
-    if (distance >= maxWaterSpreadDistance || level <= 1) return;
-
-    const nextLevel = level - 1;
-    const nxPlus = x + 1;
-    const nxMinus = x - 1;
-    const nzPlus = z + 1;
-    const nzMinus = z - 1;
-
-    const keyXP = keyOf(nxPlus, y, z);
-    const keyXM = keyOf(nxMinus, y, z);
-    const keyZP = keyOf(x, y, nzPlus);
-    const keyZM = keyOf(x, y, nzMinus);
-
-    const blockXP = blocks.get(keyXP);
-    const blockXM = blocks.get(keyXM);
-    const blockZP = blocks.get(keyZP);
-    const blockZM = blocks.get(keyZM);
-
-    const waterXP = waterCells.get(keyXP);
-    const waterXM = waterCells.get(keyXM);
-    const waterZP = waterCells.get(keyZP);
-    const waterZM = waterCells.get(keyZM);
-
-    const isVoidBelow = (tx: number, tz: number) => {
-      for (let cy = y - 1; cy >= worldBottom; cy--) {
-        if (blocks.has(keyOf(tx, cy, tz))) return false;
-      }
-      return true;
-    };
-
-    const anyNeighborVoid = !settings.infiniteWaterSpread && (
-      (!blockXP && isVoidBelow(nxPlus, z)) ||
-      (!blockXM && isVoidBelow(nxMinus, z)) ||
-      (!blockZP && isVoidBelow(x, nzPlus)) ||
-      (!blockZM && isVoidBelow(x, nzMinus))
-    );
-
-    if (!anyNeighborVoid) {
-      if ((!blockXP || isPlantBlock(blockXP.type)) && (!waterXP || waterXP.level < nextLevel)) {
-        if (blockXP && isReplaceableBlock(blockXP.type)) removeBlockAt(nxPlus, y, z, false);
-        addWaterCell(nxPlus, y, z, distance + 1, nextLevel, false);
-      }
-      if ((!blockXM || isPlantBlock(blockXM.type)) && (!waterXM || waterXM.level < nextLevel)) {
-        if (blockXM && isReplaceableBlock(blockXM.type)) removeBlockAt(nxMinus, y, z, false);
-        addWaterCell(nxMinus, y, z, distance + 1, nextLevel, false);
-      }
-      if ((!blockZP || isPlantBlock(blockZP.type)) && (!waterZP || waterZP.level < nextLevel)) {
-        if (blockZP && isReplaceableBlock(blockZP.type)) removeBlockAt(x, y, nzPlus, false);
-        addWaterCell(x, y, nzPlus, distance + 1, nextLevel, false);
-      }
-      if ((!blockZM || isPlantBlock(blockZM.type)) && (!waterZM || waterZM.level < nextLevel)) {
-        if (blockZM && isReplaceableBlock(blockZM.type)) removeBlockAt(x, y, nzMinus, false);
-        addWaterCell(x, y, nzMinus, distance + 1, nextLevel, false);
-      }
-    }
-  }
-
-  function updateWater(delta: number) {
-    waterUpdateTimer += delta;
-    if (waterUpdateTimer < 0.25) return;
-    waterUpdateTimer = 0;
-
-    const toProcess = [...queuedWaterUpdates];
-    queuedWaterUpdates.clear();
-    waterUpdates.length = 0;
-
-    const requeue = new Set<string>();
-    for (const key of toProcess) {
-      const block = waterCells.get(key);
-      if (block) flowWaterFrom(block);
-    }
-
-    for (const key of requeue) {
-      if (!queuedWaterUpdates.has(key)) {
-        queuedWaterUpdates.add(key);
-        waterUpdates.push(key);
-      }
-    }
-  }
-
   function animate(timestamp?: number) {
     if (isDisposed) return;
 
@@ -2281,8 +1558,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     updatePlacedModels(delta, timer.getElapsed());
     updatePrimedTnt(delta);
     updateFallingBlocks(delta);
-    updateWater(delta);
-    rebuildDirtyWaterChunks();
+    _updateWater(waterCtx, delta);
+    _rebuildDirtyWaterChunks(waterCtx);
     updateSelectedModelHelper();
     if (controls.isLocked || touchActive) updatePlayer(delta);
     renderer.render(scene, camera);
@@ -2337,7 +1614,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     }
 
     if (event.code === 'KeyF') {
-      const entity = selectedPlacedModelId ? placedModels.get(selectedPlacedModelId) : null;
+      const entity = modelCtx.selectedPlacedModelId ? placedModels.get(modelCtx.selectedPlacedModelId) : null;
       if (entity && controls.object.position.distanceTo(entity.root.position) <= 6.5) {
         event.preventDefault();
         onModelMenuRequest?.();
@@ -2348,6 +1625,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     if (selectedModelId && event.code === 'KeyR') {
       event.preventDefault();
       modelPlacementRotation = (modelPlacementRotation + Math.PI / 8) % (Math.PI * 2);
+      modelCtx.modelPlacementRotation = modelPlacementRotation;
       emitSnapshot();
       return;
     }
@@ -2356,6 +1634,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       event.preventDefault();
       const delta = event.code === 'BracketRight' ? 0.1 : -0.1;
       modelPlacementScale = THREE.MathUtils.clamp(modelPlacementScale + delta, 0.2, 3);
+      modelCtx.modelPlacementScale = modelPlacementScale;
       emitSnapshot();
       return;
     }
@@ -2423,624 +1702,76 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     emitSnapshot(false);
   }
 
-  function importGltfModel(url: string, position = new THREE.Vector3()) {
-    return gltfLoader.loadAsync(url).then((gltf) => {
-      gltf.scene.position.copy(position);
-      gltf.scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.castShadow = settings.shadows;
-          object.receiveShadow = true;
-        }
-      });
-      scene.add(gltf.scene);
-      return gltf.scene;
-    });
-  }
-
-  function tuneMmdMaterial(material: THREE.Material) {
-    const mat = material as THREE.MeshStandardMaterial & THREE.MeshToonMaterial & THREE.MeshPhongMaterial;
-    if ('color' in mat && mat.color instanceof THREE.Color && !mat.userData.baseColor) mat.userData.baseColor = mat.color.clone();
-    if ('emissive' in mat && mat.emissive instanceof THREE.Color) mat.emissive.setHex(0x000000);
-    if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0;
-    if ('roughness' in mat) mat.roughness = Math.max(mat.roughness ?? 0.7, 0.82);
-    if ('metalness' in mat) mat.metalness = Math.min(mat.metalness ?? 0, 0.05);
-    if (mat.map) {
-      mat.map.colorSpace = THREE.SRGBColorSpace;
-      mat.map.needsUpdate = true;
-    }
-    material.needsUpdate = true;
-  }
-
-  function registerImportedMaterial(material: THREE.Material) {
-    const mat = material as THREE.Material & { color?: THREE.Color };
-    if (mat.color instanceof THREE.Color && !material.userData.baseColor) material.userData.baseColor = mat.color.clone();
-    if (material.userData.baseOpacity === undefined) material.userData.baseOpacity = material.opacity;
-    if (material.userData.baseTransparent === undefined) material.userData.baseTransparent = material.transparent;
-    if (material.userData.baseDepthWrite === undefined) material.userData.baseDepthWrite = material.depthWrite;
-    importedModelMaterials.add(material);
-  }
-
   function applyModelBrightness() {
-    for (const material of importedModelMaterials) {
-      const mat = material as THREE.Material & { color?: THREE.Color };
-      const baseColor = material.userData.baseColor as THREE.Color | undefined;
-      if (mat.color instanceof THREE.Color && baseColor) {
-        mat.color.copy(baseColor).multiplyScalar(settings.modelBrightness);
-      }
-    }
+    _applyModelBrightness(importedModelMaterials, settings.modelBrightness);
   }
 
   function applyPlacedModelSettings(entity: PlacedModelEntity) {
-    entity.root.position.copy(entity.anchor).add(entity.offset);
-    if (entity.animation !== 'idle') entity.root.rotation.z = 0;
-    entity.root.scale.setScalar(entity.baseScale * entity.scale);
-    entity.root.visible = entity.visible;
-
-    const wantShadow = entity.shadows && settings.shadows;
-    if (entity._lastShadow !== wantShadow) {
-      entity._lastShadow = wantShadow;
-      entity.root.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = wantShadow;
-          child.receiveShadow = entity.shadows;
-        }
-      });
-    }
-
-    for (const material of entity.materials) {
-      const mat = material as THREE.Material & { color?: THREE.Color };
-      const baseColor = material.userData.baseColor as THREE.Color | undefined;
-      if (mat.color instanceof THREE.Color && baseColor) {
-        mat.color.copy(baseColor).multiplyScalar(settings.modelBrightness * entity.brightness);
-      }
-      const part = entity.partByMaterial.get(material);
-      const baseOpacity = typeof material.userData.baseOpacity === 'number' ? material.userData.baseOpacity : 1;
-      const baseTransparent = Boolean(material.userData.baseTransparent);
-      const baseDepthWrite = material.userData.baseDepthWrite !== false;
-      const opacity = entity.opacity * (part?.opacity ?? 1) * baseOpacity;
-      material.visible = part?.visible ?? true;
-      material.transparent = opacity < 0.98 || baseTransparent;
-      material.opacity = opacity;
-      material.depthWrite = opacity >= 0.98 && baseDepthWrite;
-    }
-    updateSelectedModelHelper();
+    _applyPlacedModelSettings(entity, settings, updateSelectedModelHelper);
   }
 
   function updateSelectedPlacedModel(nextSettings: Partial<Omit<PlacedModelSettings, 'id' | 'name'>>) {
-    if (!selectedPlacedModelId) return;
-    const entity = placedModels.get(selectedPlacedModelId);
-    if (!entity) return;
-    if (nextSettings.rotation !== undefined) entity.root.rotation.y = nextSettings.rotation;
-    if (nextSettings.scale !== undefined) entity.scale = THREE.MathUtils.clamp(nextSettings.scale, 0.15, 4);
-    if (nextSettings.offsetX !== undefined) entity.offset.x = THREE.MathUtils.clamp(nextSettings.offsetX, -8, 8);
-    if (nextSettings.offsetY !== undefined) entity.offset.y = THREE.MathUtils.clamp(nextSettings.offsetY, -8, 8);
-    if (nextSettings.offsetZ !== undefined) entity.offset.z = THREE.MathUtils.clamp(nextSettings.offsetZ, -8, 8);
-    if (nextSettings.brightness !== undefined) entity.brightness = THREE.MathUtils.clamp(nextSettings.brightness, 0.2, 2);
-    if (nextSettings.opacity !== undefined) entity.opacity = THREE.MathUtils.clamp(nextSettings.opacity, 0.15, 1);
-    if (nextSettings.visible !== undefined) entity.visible = nextSettings.visible;
-    if (nextSettings.shadows !== undefined) entity.shadows = nextSettings.shadows;
-    if (nextSettings.damageable !== undefined) entity.damageable = nextSettings.damageable;
-    if (nextSettings.maxHealth !== undefined) {
-      entity.maxHealth = THREE.MathUtils.clamp(nextSettings.maxHealth, 5, 300);
-      entity.health = Math.min(entity.health, entity.maxHealth);
-    }
-    if (nextSettings.health !== undefined) entity.health = THREE.MathUtils.clamp(nextSettings.health, 0, entity.maxHealth);
-    if (nextSettings.animation !== undefined) entity.animation = nextSettings.animation;
-    if (nextSettings.vmdPlaying !== undefined) entity.vmdPlaying = nextSettings.vmdPlaying;
-    if (nextSettings.animationSpeed !== undefined) entity.animationSpeed = THREE.MathUtils.clamp(nextSettings.animationSpeed, 0, 3);
-    if (nextSettings.animationDistance !== undefined) entity.animationDistance = THREE.MathUtils.clamp(nextSettings.animationDistance, 8, 120);
-    applyPlacedModelSettings(entity);
-    emitSnapshot();
+    _updateSelectedPlacedModel(modelCtx, nextSettings);
   }
 
   function updateSelectedModelPart(partId: string, nextSettings: Partial<Omit<ModelPartSettings, 'id' | 'name'>>) {
-    if (!selectedPlacedModelId) return;
-    const entity = placedModels.get(selectedPlacedModelId);
-    if (!entity) return;
-    const part = entity.parts.find((modelPart) => modelPart.id === partId);
-    if (!part) return;
-    if (nextSettings.visible !== undefined) part.visible = nextSettings.visible;
-    if (nextSettings.opacity !== undefined) part.opacity = THREE.MathUtils.clamp(nextSettings.opacity, 0, 1);
-    applyPlacedModelSettings(entity);
-    emitSnapshot();
+    _updateSelectedModelPart(modelCtx, partId, nextSettings);
   }
 
   function flashEntityMaterials(entity: PlacedModelEntity, strength: number) {
-    for (const material of entity.materials) {
-      const mat = material as THREE.Material & { color?: THREE.Color };
-      const baseColor = material.userData.baseColor as THREE.Color | undefined;
-      if (mat.color instanceof THREE.Color && baseColor) {
-        mat.color.copy(baseColor).lerp(_colorHurtFlash, strength).multiplyScalar(settings.modelBrightness * entity.brightness);
-      }
-    }
+    _flashEntityMaterials(entity, strength, modelCtx._colorHurtFlash, settings.modelBrightness);
   }
 
   function damagePlacedModel(entity: PlacedModelEntity, amount: number, knockback?: THREE.Vector3) {
-    if (!entity.damageable || entity.hurtCooldown > 0 || entity.health <= 0) return;
-    entity.health = Math.max(0, entity.health - amount);
-    entity.hurtCooldown = 0.22;
-    entity.hurtFlash = 0.18;
-    if (knockback) {
-      entity.velocity.add(knockback);
-      entity.velocityY = 6;
-    }
-    selectedPlacedModelId = entity.id;
-    updateSelectedModelHelper();
-    if (entity.health <= 0) destroyPlacedModel(entity);
-    emitSnapshot();
-  }
-
-  function destroyPlacedModel(entity: PlacedModelEntity) {
-    scene.remove(entity.root);
-    placedModels.delete(entity.id);
-    const index = placedModelRaycastRoots.indexOf(entity.root);
-    if (index >= 0) placedModelRaycastRoots.splice(index, 1);
-    if (selectedPlacedModelId === entity.id) selectedPlacedModelId = null;
-    updateSelectedModelHelper();
-  }
-
-  function tuneMmdObject(object: THREE.Object3D) {
-    object.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      materials.forEach((material) => tuneMmdMaterial(material));
-    });
-  }
-
-  function collectObjectMaterials(object: THREE.Object3D) {
-    const materials: THREE.Material[] = [];
-    object.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
-      materials.push(...childMaterials);
-    });
-    return materials;
-  }
-
-  function collectModelParts(object: THREE.Object3D) {
-    const parts: ModelPart[] = [];
-    const seenMaterials = new Set<THREE.Material>();
-    object.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
-      childMaterials.forEach((material, materialIndex) => {
-        if (seenMaterials.has(material)) return;
-        seenMaterials.add(material);
-        const rawName = material.name || child.name || `部件 ${parts.length + 1}`;
-        const slotSuffix = childMaterials.length > 1 ? ` #${materialIndex + 1}` : '';
-        parts.push({
-          id: `part-${parts.length.toString(36)}`,
-          name: `${rawName}${slotSuffix}`,
-          visible: material.visible,
-          opacity: typeof material.userData.baseOpacity === 'number' ? material.userData.baseOpacity : material.opacity,
-          material,
-        });
-      });
-    });
-    return parts;
-  }
-
-  function prepareImportedObject(object: THREE.Object3D) {
-    const materials = collectObjectMaterials(object);
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = settings.shadows;
-        child.receiveShadow = true;
-      }
-    });
-    materials.forEach((material) => registerImportedMaterial(material));
-    return materials;
-  }
-
-  function updateProgress(options: ModelImportOptions | undefined, progress: number, label: string, fileName?: string) {
-    options?.onProgress?.({ progress: THREE.MathUtils.clamp(progress, 0, 1), label, fileName });
-  }
-
-
-
-  function updateSelectedModelHelper() {
-    // 逻辑已移除，保持空函数签名兼容其他调用
+    _damagePlacedModel(modelCtx, entity, amount, knockback);
   }
 
   function selectPlacedModel(entity: PlacedModelEntity | null) {
-    selectedPlacedModelId = entity?.id ?? null;
-    updateSelectedModelHelper();
-    emitSnapshot();
+    _selectPlacedModel(modelCtx, entity);
   }
 
   function removeSelectedPlacedModel() {
-    if (!selectedPlacedModelId) return;
-    const entity = placedModels.get(selectedPlacedModelId);
-    if (!entity) return;
-    scene.remove(entity.root);
-    placedModels.delete(entity.id);
-    const index = placedModelRaycastRoots.indexOf(entity.root);
-    if (index >= 0) placedModelRaycastRoots.splice(index, 1);
-    selectedPlacedModelId = null;
-    updateSelectedModelHelper();
-    emitSnapshot();
+    _removeSelectedPlacedModel(modelCtx);
   }
 
   function findPlacedModelFromObject(object: THREE.Object3D) {
-    let current: THREE.Object3D | null = object;
-    while (current) {
-      const id = current.userData.placedModelId as string | undefined;
-      if (id) return placedModels.get(id) ?? null;
-      current = current.parent;
-    }
-    return null;
+    return _findPlacedModelFromObject(modelCtx, object);
   }
 
-  function placeImportedObject(object: THREE.Object3D, position: THREE.Vector3, scale = 1, kind: 'generic' | 'mmd' = 'generic') {
-    object.position.copy(position);
-    object.scale.setScalar(scale);
-    if (kind === 'mmd') tuneMmdObject(object);
-    prepareImportedObject(object);
-    applyModelBrightness();
-    scene.add(object);
-    return object;
+  function importGltfModel(url: string, position = new THREE.Vector3()) {
+    return _importGltfModel(modelCtx, url, position) as Promise<THREE.Group>;
   }
 
-  function findSkinnedMesh(root: THREE.Object3D) {
-    let skinnedMesh: THREE.SkinnedMesh | undefined;
-    root.traverse((child) => {
-      if (!skinnedMesh && child instanceof THREE.SkinnedMesh) skinnedMesh = child;
-    });
-    return skinnedMesh;
+  function importMmdModel(source: File | string, position = new THREE.Vector3()) {
+    return _importMmdModel(modelCtx, source, position);
   }
 
-  function registerImportedModel(root: THREE.Object3D, name: string, kind: 'generic' | 'mmd', scale = 1, mmdModel?: MmdModelHandle): ImportedModelItem {
-    const id = `model-${Date.now().toString(36)}-${modelItemSequence.toString(36)}`;
-    modelItemSequence += 1;
-    root.visible = false;
-    if (kind === 'mmd') tuneMmdObject(root);
-    const preparedRoot = SkeletonUtils.clone(root);
-    preparedRoot.visible = false;
-    const materials = prepareImportedObject(preparedRoot);
-    const previewBox = new THREE.Box3().setFromObject(preparedRoot);
-    const previewSize = previewBox.getSize(new THREE.Vector3());
-    const previewCenter = previewBox.getCenter(new THREE.Vector3());
-    storedModels.set(id, { id, name, kind, root: preparedRoot, mmdModel, scale, materials, previewSize, previewCenter });
-    return { id, name, kind };
+  function importModelFiles(files: File[], options?: ModelImportOptions) {
+    return _importModelFiles(modelCtx, files, options);
   }
 
-  function placeStoredModel(modelId: string, position: THREE.Vector3) {
-    const stored = storedModels.get(modelId);
-    if (!stored) return null;
-    const clone = SkeletonUtils.clone(stored.root);
-    clone.visible = true;
-    clone.position.copy(position);
-    clone.rotation.y = modelPlacementRotation;
-    clone.scale.setScalar(stored.scale * modelPlacementScale);
-
-    const sharedMaterials = stored.materials;
-    clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = settings.shadows;
-        child.receiveShadow = true;
-        if (Array.isArray(child.material)) {
-          child.material = child.material.map((m) => {
-            const found = sharedMaterials.find((sm) => sm.uuid === m.uuid || sm.name === m.name);
-            return found ?? m;
-          });
-        } else {
-          const found = sharedMaterials.find((sm) => sm.uuid === child.material.uuid || sm.name === child.material.name);
-          if (found) child.material = found;
-        }
-      }
-    });
-
-    const materials = sharedMaterials;
-    materials.forEach((material) => registerImportedMaterial(material));
-    const parts = collectModelParts(clone);
-    const partByMaterial = new Map(parts.map((part) => [part.material, part]));
-    applyModelBrightness();
-    const placedId = `placed-${Date.now().toString(36)}-${placedModelSequence.toString(36)}`;
-    placedModelSequence += 1;
-    clone.userData.placedModelId = placedId;
-    clone.traverse((child) => {
-      child.userData.placedModelId = placedId;
-    });
-    const entity = {
-      id: placedId,
-      modelId,
-      name: stored.name,
-      root: clone,
-      anchor: position.clone(),
-      baseScale: stored.scale,
-      scale: modelPlacementScale,
-      offset: new THREE.Vector3(),
-      brightness: 1,
-      opacity: 1,
-      visible: true,
-      shadows: true,
-      damageable: true,
-      health: 40,
-      maxHealth: 40,
-      hurtCooldown: 0,
-      hurtFlash: 0,
-      velocity: new THREE.Vector3(),
-      velocityY: 0,
-      animation: 'none' as const,
-      vmdPlaying: false,
-      vmdTime: 0,
-      mmdMesh: stored.kind === 'mmd' ? findSkinnedMesh(clone) : undefined,
-      animationSpeed: 1,
-      animationDistance: 48,
-      animationPhase: Math.random() * Math.PI * 2,
-      animationTick: 0,
-      materials,
-      parts,
-      partByMaterial,
-    };
-    placedModels.set(placedId, entity);
-    placedModelRaycastRoots.push(clone);
-    scene.add(clone);
-    applyPlacedModelSettings(entity);
-    selectPlacedModel(entity);
-    return clone;
+  function importModelFile(file: File, options?: ModelImportOptions) {
+    return _importModelFile(modelCtx, file, options);
   }
 
-  async function loadMmdTools() {
-    return import('@yohawing/three-mmd-loader');
-  }
-
-  async function createMmdRuntimeForEntity(entity: PlacedModelEntity) {
-    if (entity.mmdRuntime || !entity.mmdMesh) return entity.mmdRuntime;
-    const { DefaultMmdRuntime } = await loadMmdTools();
-    entity.mmdRuntime = new DefaultMmdRuntime({ physics: 'none' }) as MmdRuntimeHandle;
-    if (entity.vmdAnimation) entity.mmdRuntime.setAnimation?.(entity.vmdAnimation, entity.mmdMesh);
-    return entity.mmdRuntime;
-  }
-
-  async function importVmdForSelectedModel(file: File) {
-    if (!selectedPlacedModelId) throw new Error('No placed model selected.');
-    const entity = placedModels.get(selectedPlacedModelId);
-    if (!entity || !entity.mmdMesh) throw new Error('Selected model does not support VMD.');
-    const { ThreeMmdLoader } = await loadMmdTools();
-    const loader = new ThreeMmdLoader();
-    const loaded = await loader.loadAnimation(file);
-    entity.vmdAnimation = loaded.animation;
-    entity.vmdName = file.name;
-    entity.vmdPlaying = false;
-    entity.vmdTime = 0;
-    entity.animation = 'none';
-    const runtime = await createMmdRuntimeForEntity(entity);
-    runtime?.setAnimation?.(entity.vmdAnimation, entity.mmdMesh);
-    emitSnapshot();
-  }
-
-  async function importMmdModel(source: File | string, position = new THREE.Vector3()): Promise<THREE.Object3D> {
-    const { ThreeMmdLoader } = await loadMmdTools();
-    const mmdLoader = new ThreeMmdLoader();
-    const model = await mmdLoader.loadModel(source);
-    return placeImportedObject(model.root, position, 0.12, 'mmd');
-  }
-
-  async function importMmdModelFiles(files: File[], modelFile: File, options?: ModelImportOptions, progressStart = 0, progressSpan = 1) {
-    updateProgress(options, progressStart + progressSpan * 0.08, '读取 MMD 文件', modelFile.name);
-    const { createMmdTextureMapFromFiles, ThreeMmdLoader } = await loadMmdTools();
-    updateProgress(options, progressStart + progressSpan * 0.18, '准备贴图映射', modelFile.name);
-    const loader = new ThreeMmdLoader({ textureMap: createMmdTextureMapFromFiles(files, modelFile) });
-    updateProgress(options, progressStart + progressSpan * 0.28, '解析 PMX/PMD', modelFile.name);
-    const model = await loader.loadModel(modelFile);
-    updateProgress(options, progressStart + progressSpan * 0.82, '注册可放置模型', modelFile.name);
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    return registerImportedModel(model.root, modelFile.name, 'mmd', 0.12, model as MmdModelHandle);
-  }
-
-  async function importGltfModelFile(file: File, options?: ModelImportOptions) {
-    const url = URL.createObjectURL(file);
-    try {
-      updateProgress(options, 0.15, '读取 GLTF/GLB', file.name);
-      const gltf = await gltfLoader.loadAsync(url);
-      updateProgress(options, 0.85, '注册可放置模型', file.name);
-      return registerImportedModel(gltf.scene, file.name, 'generic', 1);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
-
-  async function importModelFiles(files: File[], options?: ModelImportOptions) {
-    const hasMmdFiles = files.some((file) => file.name.match(/\.(pmx|pmd)$/i));
-    if (!hasMmdFiles) {
-      const gltfModel = files.find((file) => file.name.match(/\.(glb|gltf)$/i));
-      if (gltfModel) return importModelFile(gltfModel, options);
-      return Promise.reject(new Error('No supported model file found.'));
-    }
-
-    updateProgress(options, 0.03, '扫描 MMD 文件夹');
-    const { findMmdModelFiles } = await loadMmdTools();
-    const mmdModels = findMmdModelFiles(files);
-    if (mmdModels.length > 0) {
-      const imported: ImportedModelItem[] = [];
-      for (const [index, mmdModel] of mmdModels.entries()) {
-        const start = 0.06 + (index / mmdModels.length) * 0.9;
-        const span = 0.9 / mmdModels.length;
-        try {
-          imported.push(await importMmdModelFiles(files, mmdModel, options, start, span));
-          updateProgress(options, start + span, `已处理 ${index + 1}/${mmdModels.length}`, mmdModel.name);
-        } catch (error) {
-          console.warn(`Failed to import MMD model ${mmdModel.name}`, error);
-        }
-      }
-      updateProgress(options, 1, '导入完成');
-      if (imported.length > 0) return imported;
-    }
-
-    const gltfModel = files.find((file) => file.name.match(/\.(glb|gltf)$/i));
-    if (gltfModel) return importModelFile(gltfModel, options);
-
-    return Promise.reject(new Error('No supported model file found.'));
-  }
-
-  async function importModelFile(file: File, options?: ModelImportOptions): Promise<ImportedModelItem[]> {
-    if (file.name.match(/\.(pmx|pmd)$/i)) {
-      const item = await importMmdModelFiles([file], file, options);
-      updateProgress(options, 1, '导入完成', file.name);
-      return [item];
-    }
-    const item = await importGltfModelFile(file, options);
-    updateProgress(options, 1, '导入完成', file.name);
-    return [item];
+  function importVmdForSelectedModel(file: File) {
+    return _importVmdForSelectedModel(modelCtx, file);
   }
 
   function noteMmdSupport() {
-    return 'PMX/PMD folders are supported through @yohawing/three-mmd-loader texture maps.';
+    return _noteMmdSupport();
   }
 
   // 异步初始化世界
-  await new Promise<void>((resolve) => {
-    onProgress?.('生成地形', 0);
-    
-    // 使用 setTimeout 分批处理
-    const batchSize = 20;
-    const xCoords: number[] = [];
-    const zCoords: number[] = [];
-    
-    for (let x = -worldRadius; x <= worldRadius; x += 1) {
-      for (let z = -worldRadius; z <= worldRadius; z += 1) {
-        xCoords.push(x);
-        zCoords.push(z);
-      }
-    }
-    
-    let index = 0;
-    const totalBlocks = xCoords.length;
-    
-    // 树木密度倍率
-    const treeDensityMultiplier = worldGen.treeDensity === 'none' ? 0 
-      : worldGen.treeDensity === 'sparse' ? 1.5 
-      : worldGen.treeDensity === 'dense' ? 0.7 
-      : 1;
-
-    // 结构密度倍率
-    const structureDensityOffset = worldGen.structureDensity === 'none' ? 1 
-      : worldGen.structureDensity === 'sparse' ? 0.05 
-      : worldGen.structureDensity === 'dense' ? -0.05 
-      : 0;
-
-    // 矿物密度倍率
-    const oreDensityMultiplier = worldGen.oreDensity === 'none' ? 0 
-      : worldGen.oreDensity === 'sparse' ? 1.5 
-      : worldGen.oreDensity === 'rich' ? 0.7 
-      : 1;
-
-    function processBatch() {
-      const endIndex = Math.min(index + batchSize, totalBlocks);
-      
-      for (let i = index; i < endIndex; i += 1) {
-        const x = xCoords[i];
-        const z = zCoords[i];
-        const distance = Math.hypot(x, z);
-        if (distance > worldRadius + Math.sin(x * z) * 0.8) continue;
-
-        const biome = getBiome(x, z);
-        const config = biomeConfig[biome];
-        const river = worldGen.flatWorld ? { bed: false, bank: false, bankBlend: 0, depth: 0 } : riverProfile(x, z);
-
-        let h: number;
-        if (worldGen.flatWorld) {
-          h = waterLevel;
-        } else {
-          h = terrainHeight(x, z);
-          if (river.bed) h = Math.min(h - river.depth, waterLevel - river.depth);
-          if (!river.bed && river.bank && river.bankBlend > 0.5 && h > waterLevel + 1) h -= 1;
-          if (!river.bed && river.bank) h = Math.max(h, waterLevel);
-        }
-
-        for (let y = worldBottom; y <= h; y += 1) {
-          const bankRoll = seededNoise(x, y, z);
-          let surfaceType: BlockType;
-          if (river.bed) {
-            surfaceType = bankRoll > 0.38 ? 'sand' : 'gravel';
-          } else if (river.bank && bankRoll < river.bankBlend * 0.58) {
-            surfaceType = 'sand';
-          } else if (biome === 'desert') {
-            surfaceType = 'sand';
-          } else if (biome === 'snow') {
-            surfaceType = y === h ? 'snow' : 'grass';
-          } else {
-            surfaceType = config.surfaceBlock;
-          }
-          const type = y === worldBottom ? 'bedrock' : y === h ? surfaceType : biome === 'desert' ? (y > h - 4 ? 'sand' : 'stone') : y > h - 3 ? 'dirt' : 'stone';
-          addBlock(x, y, z, type);
-        }
-
-        // 矿物生成 - 只在地下深处生成
-        if (oreDensityMultiplier > 0 && h > waterLevel + 3) {
-          const mineralNoise = seededNoise(x * 3, h * 3, z * 3);
-          const oreThreshold = 0.96 * oreDensityMultiplier;
-          if (mineralNoise > oreThreshold) buildMineralVein(x, h - 5, z, 'coalOre');
-          if (mineralNoise > oreThreshold + 0.01) buildMineralVein(x, h - 8, z, 'ironOre');
-          if (mineralNoise > oreThreshold + 0.02) buildMineralVein(x, h - 11, z, 'copperOre');
-          if (mineralNoise > oreThreshold + 0.03) buildMineralVein(x, h - 14, z, 'goldOre');
-          if (mineralNoise > oreThreshold + 0.035) buildMineralVein(x, h - 17, z, 'diamondOre');
-        }
-
-        if (river.bed) {
-          for (let y = h + 1; y <= waterLevel; y += 1) addBlock(x, y, z, 'water', 0);
-          continue;
-        }
-
-        // 树木生成 - 根据生物群系和设置
-        if (treeDensityMultiplier > 0 && distance > 8 && !river.bank && config.treeTypes.length > 0) {
-          const treeNoise = seededNoise(x, h, z);
-          const treeThreshold = config.treeDensity * treeDensityMultiplier;
-          if (treeNoise > treeThreshold) {
-            const treeType = config.treeTypes[Math.floor(seededNoise(x, h + 1, z) * config.treeTypes.length)];
-            if (treeType === 'oak') buildTree(x, h, z);
-            else if (treeType === 'jungle') buildJungleTree(x, h, z);
-            else if (treeType === 'cherry') buildCherryTree(x, h, z);
-            else if (treeType === 'spruce') buildSpruceTree(x, h, z);
-          }
-        }
-
-        // 植被和结构生成
-        if (h >= waterLevel && worldGen.structureDensity !== 'none') {
-          const structNoise = seededNoise(x + 11, h, z - 7);
-          const structThreshold = config.plantDensity + structureDensityOffset;
-          if (structNoise > structThreshold) addVegetation(x, h, z);
-          else if (biome === 'desert' && structNoise > 0.92 - structureDensityOffset) buildCactus(x, h, z);
-          else if (biome !== 'desert' && biome !== 'snow' && structNoise > 0.93 - structureDensityOffset) buildPumpkinPatch(x, h, z);
-          else if (biome === 'forest' && structNoise > 0.91 - structureDensityOffset) buildMushroomCluster(x, h, z);
-          else if (biome !== 'desert' && structNoise > 0.89 - structureDensityOffset) buildRockFormation(x, h, z);
-          else if (biome !== 'desert' && structNoise > 0.87 - structureDensityOffset) buildPond(x, h, z);
-          else if (biome === 'snow' && structNoise > 0.85 - structureDensityOffset) buildSnowPile(x, h, z);
-        }
-      }
-      
-      index = endIndex;
-      onProgress?.('生成地形', index / totalBlocks);
-      
-      if (index < totalBlocks) {
-        setTimeout(processBatch, 0);
-      } else {
-        onProgress?.('处理物理', 0);
-        settleInitialFallingBlocks();
-        queueInitialWater();
-        onProgress?.('构建网格', 0);
-        rebuildAllChunks();
-        while (dirtyWaterChunks.size > 0) rebuildDirtyWaterChunks(64);
-        updateChunkVisibility(true);
-        blockMeshesReady = true;
-        for (const [key, block] of blocks) {
-          const cfg = lightConfig(block.type);
-          if (cfg) {
-            const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
-            light.position.set(block.position.x, block.position.y + 0.2, block.position.z);
-            scene.add(light);
-            blockLights.set(key, light);
-          }
-        }
-        spawnCreatures();
-        onProgress?.('完成', 1);
-        resolve();
-      }
-    }
-    
-    setTimeout(processBatch, 0);
-  });
+  const worldgenCtx: WorldGenContext = {
+    blocks, worldSeed, worldRadius, waterLevel, worldBottom, scene, creatures,
+    addBlock, settleInitialFallingBlocks, queueInitialWater, rebuildAllChunks,
+    rebuildDirtyWaterChunks: (limit) => _rebuildDirtyWaterChunks(waterCtx, limit),
+    dirtyWaterChunks: waterCtx.dirtyWaterChunks, updateChunkVisibility,
+    lightConfig, blockLights, onProgress,
+  };
+  await _generateWorld(worldgenCtx, worldGen, worldSeed);
+  blockMeshesReady = true;
 
   emitSnapshot();
 
@@ -3060,7 +1791,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const { blocksBin, blockDict } = serializeBlocks(blocks);
 
     const waterEntries: [string, { distance: number; level: number; source: boolean }][] = [];
-    for (const [key, cell] of waterCells) waterEntries.push([key, { distance: cell.distance, level: cell.level, source: cell.source }]);
+    for (const [key, cell] of waterCtx.waterCells) waterEntries.push([key, { distance: cell.distance, level: cell.level, source: cell.source }]);
 
     const placed: WorldSaveData['placedModels'] = [];
     for (const entity of placedModels.values()) {
@@ -3118,34 +1849,47 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     for (const [, chunkMesh] of chunkMeshes) {
       for (const m of chunkMesh.meshes) { scene.remove(m); m.geometry.dispose(); }
     }
-    for (const [, wm] of waterChunkMeshes) {
+    for (const [, wm] of waterCtx.waterChunkMeshes) {
       scene.remove(wm.mesh); wm.mesh.geometry.dispose();
     }
     for (const c of creatures) scene.remove(c.root);
+    for (const entity of placedModels.values()) scene.remove(entity.root);
+    for (const model of storedModels.values()) {
+      model.materials.forEach((m) => { importedModelMaterials.delete(m); });
+    }
 
     blocks.clear();
-    waterCells.clear();
-    columnSolidY.clear();
+    waterCtx.waterCells.clear();
+    waterCtx.columnSolidY.clear();
     chunkMeshes.clear();
-    waterChunkMeshes.clear();
-    dirtyWaterChunks.clear();
-    waterKeys.clear();
-    waterUpdates.length = 0;
-    queuedWaterUpdates.clear();
+    waterCtx.waterChunkMeshes.clear();
+    waterCtx.dirtyWaterChunks.clear();
+    waterCtx.waterKeys.clear();
+    waterCtx.waterUpdates.length = 0;
+    waterCtx.queuedWaterUpdates.clear();
     creatures.length = 0;
     fallingBlocks.length = 0;
     placedModels.clear();
+    placedModelRaycastRoots.length = 0;
+    storedModels.clear();
+    importedModelMaterials.clear();
 
     if (data.version === 2 && data.blocksBin && data.blockDict) {
-      deserializeBlocks(data, blocks, addSolidColumnY, keyOf, THREE.Vector3);
+      deserializeBlocks(data, blocks, (x, y, z) => _addSolidColumnY(waterCtx, x, y, z), keyOf, THREE.Vector3);
     }
 
     for (const [key, cell] of data.waterCells) {
       const [xs, ys, zs] = key.split(',');
       const x = +xs, y = +ys, z = +zs;
-      waterCells.set(key, { position: new THREE.Vector3(x, y, z), ...cell });
-      waterKeys.add(key);
-      markWaterChunkDirty(x, z);
+      waterCtx.waterCells.set(key, { position: new THREE.Vector3(x, y, z), ...cell });
+      waterCtx.waterKeys.add(key);
+      _markWaterChunkDirty(waterCtx, x, z);
+    }
+
+    itemFrameContents.clear();
+    itemFrameMaterialCache.clear();
+    if (data.itemFrameContents) {
+      for (const [key, val] of data.itemFrameContents) itemFrameContents.set(key, val as BlockType);
     }
 
     camera.position.set(data.player.x, data.player.y, data.player.z);
@@ -3156,9 +1900,20 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
     timeOfDay = data.timeOfDay;
     settings.timeOfDay = data.timeOfDay;
+    if (data.settings) {
+      if (data.settings.mouseSensitivity !== undefined) settings.mouseSensitivity = data.settings.mouseSensitivity;
+      if (data.settings.moveSpeed !== undefined) settings.moveSpeed = data.settings.moveSpeed;
+      if (data.settings.daySpeed !== undefined) settings.daySpeed = data.settings.daySpeed;
+      if (data.settings.shadows !== undefined) settings.shadows = data.settings.shadows;
+      if (data.settings.viewDistance !== undefined) settings.viewDistance = data.settings.viewDistance;
+      if (data.settings.modelBrightness !== undefined) settings.modelBrightness = data.settings.modelBrightness;
+      if (data.settings.breakSpeed !== undefined) settings.breakSpeed = data.settings.breakSpeed;
+      if (data.settings.showFps !== undefined) settings.showFps = data.settings.showFps;
+      if (data.settings.infiniteWaterSpread !== undefined) settings.infiniteWaterSpread = data.settings.infiniteWaterSpread;
+    }
 
     rebuildAllChunks();
-    while (dirtyWaterChunks.size > 0) rebuildDirtyWaterChunks(64);
+    while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
 
     for (const light of blockLights.values()) { scene.remove(light); light.dispose(); }
     blockLights.clear();
@@ -3172,11 +1927,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       }
     }
 
-    itemFrameContents.clear();
-    itemFrameMaterialCache.clear();
-    if (data.itemFrameContents) {
-      for (const [key, val] of data.itemFrameContents) itemFrameContents.set(key, val as BlockType);
-    }
+    _spawnCreatures(worldgenCtx, worldSeed);
 
     blockMeshesReady = true;
     emitSnapshot();
@@ -3185,7 +1936,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   function respawn() {
     const spawnX = 0;
     const spawnZ = 7;
-    const spawnY = terrainHeight(spawnX, spawnZ) + playerHeight + 2;
+    const spawnY = _terrainHeight(worldSeed, spawnX, spawnZ) + playerHeight + 2;
     camera.position.set(spawnX, spawnY, spawnZ);
     cameraYaw = 0;
     cameraPitch = 0;

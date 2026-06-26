@@ -90,6 +90,68 @@ export type ModelImportOptions = {
   onProgress?: (progress: ModelImportProgress) => void;
 };
 
+export type MmdModelHandle = {
+  root: THREE.Object3D;
+  mesh?: THREE.SkinnedMesh;
+  setAnimation?: (animation: unknown) => void;
+  update?: (seconds: number, options?: { physics?: boolean; ik?: boolean }) => unknown;
+};
+
+export type MmdRuntimeHandle = {
+  setAnimation?: (animation: unknown, mesh: THREE.SkinnedMesh) => void;
+  tick?: (seconds: number, options?: { mesh?: THREE.Object3D; physics?: boolean; ik?: boolean }) => unknown;
+};
+
+export type ModelPart = ModelPartSettings & {
+  material: THREE.Material;
+};
+
+export type PlacedModelEntity = {
+  id: string;
+  modelId: string;
+  name: string;
+  root: THREE.Object3D;
+  anchor: THREE.Vector3;
+  baseScale: number;
+  scale: number;
+  offset: THREE.Vector3;
+  brightness: number;
+  opacity: number;
+  visible: boolean;
+  shadows: boolean;
+  damageable: boolean;
+  health: number;
+  maxHealth: number;
+  hurtCooldown: number;
+  hurtFlash: number;
+  velocity: THREE.Vector3;
+  velocityY: number;
+  animation: PlacedModelSettings['animation'];
+  vmdName?: string;
+  vmdAnimation?: unknown;
+  mmdRuntime?: MmdRuntimeHandle;
+  mmdMesh?: THREE.SkinnedMesh;
+  vmdPlaying: boolean;
+  vmdTime: number;
+  animationSpeed: number;
+  animationDistance: number;
+  animationPhase: number;
+  animationTick: number;
+  materials: THREE.Material[];
+  parts: ModelPart[];
+  partByMaterial: Map<THREE.Material, ModelPart>;
+  _lastShadow?: boolean;
+};
+
+export type StoredModel = ImportedModelItem & {
+  root: THREE.Object3D;
+  mmdModel?: MmdModelHandle;
+  scale: number;
+  materials: THREE.Material[];
+  previewSize: THREE.Vector3;
+  previewCenter: THREE.Vector3;
+};
+
 // ──── Snapshot ────
 
 export type GameSnapshot = {
