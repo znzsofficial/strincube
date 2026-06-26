@@ -2,6 +2,8 @@
 
 A Minecraft-like voxel sandbox game built with Three.js + React + TypeScript.
 
+**Play online:** https://strincube.pages.dev
+
 ## Features
 
 - **World Generation** — 7 biomes (plains, forest, jungle, desert, snow, taiga, savanna), terrain, rivers, caves, structures, ores
