@@ -32,6 +32,8 @@ import {
   blockIconUrls,
   blockIconTints,
 } from './game/blocks';
+import { useTouchMode } from './mobile/useTouchMode';
+import { TouchControls } from './mobile/TouchControls';
 
 const blockItems = Object.keys(blockLabels) as BlockType[];
 const directoryInputProps = { webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>;
@@ -76,6 +78,7 @@ function itemKey(item: InventoryItem) {
 }
 
 export function App() {
+  const isTouch = useTouchMode();
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<BlockGameApi | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -296,6 +299,17 @@ export function App() {
   }, [screen, rendererBackend]);
 
   useEffect(() => {
+    if (screen === 'game' && gameRef.current) {
+      lockIntentRef.current = true;
+      if (isTouch) {
+        gameRef.current.touchLock();
+      } else {
+        gameRef.current.lockControls();
+      }
+    }
+  }, [screen, isTouch]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT') return;
@@ -342,9 +356,13 @@ export function App() {
         event.preventDefault();
         event.stopPropagation();
         if (event.repeat) return;
-        lockIntentRef.current = false;
-        setOverlayState('menu');
-        gameRef.current?.unlockControls();
+        if (overlayRef.current === 'menu') {
+          setOverlayState(null);
+        } else if (overlayRef.current === null) {
+          lockIntentRef.current = false;
+          setOverlayState('menu');
+          gameRef.current?.unlockControls();
+        }
       }
     }
 
@@ -668,15 +686,40 @@ export function App() {
         className="game-canvas"
         aria-label="可爱的方块世界游戏画面"
         onPointerDown={() => {
-          if (overlayRef.current === null && !snapshot.isLocked && !snapshot.isDead) requestGameLock();
+          if (overlayRef.current === null && !snapshot.isLocked && !snapshot.isDead) {
+            if (isTouch) {
+              gameRef.current?.touchLock();
+            } else {
+              requestGameLock();
+            }
+          }
         }}
       />
+
+      {isTouch && screen === 'game' && snapshot.isLocked && !snapshot.isDead && (
+        <TouchControls
+          onMove={(x, y) => gameRef.current?.setTouchMove(x, y)}
+          onJump={() => gameRef.current?.touchJump()}
+          onLook={(dx, dy) => gameRef.current?.setTouchLook(dx, dy)}
+          onTap={(x, y) => gameRef.current?.touchTap(x, y)}
+          onPlace={(x, y) => gameRef.current?.touchPlace(x, y)}
+          onPause={() => { lockIntentRef.current = false; gameRef.current?.unlockControls(); setOverlayState('menu'); }}
+        />
+      )}
 
       {!snapshot.isLocked && !snapshot.isDead && overlay === 'menu' && (
         <section className="pause-menu" aria-label="暂停菜单">
           <Cuboid size={34} aria-hidden="true" />
           <h1>StrinCube</h1>
-          <button type="button" onClick={requestGameLock}>回到游戏</button>
+          <button type="button" onClick={() => {
+            lockIntentRef.current = true;
+            setOverlayState(null);
+            if (isTouch) {
+              gameRef.current?.touchLock();
+            } else {
+              gameRef.current?.lockControls()?.catch?.(() => {});
+            }
+          }}>回到游戏</button>
           <button type="button" onClick={() => openOverlayPanel('inventory')}>背包</button>
           <button type="button" onClick={() => openOverlayPanel('settings')}>设置</button>
           <button type="button" onClick={saveGame}>保存游戏</button>

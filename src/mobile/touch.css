@@ -1,0 +1,132 @@
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.touch-controls * {
+  pointer-events: auto;
+}
+
+.touch-look-area {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.touch-joystick {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  width: 120px;
+  height: 120px;
+  z-index: 1;
+  touch-action: none;
+}
+
+.touch-joystick-bg {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: oklch(0.2 0.01 250 / 0.5);
+  border: 2px solid oklch(0.5 0.02 250 / 0.4);
+  display: grid;
+  place-items: center;
+}
+
+.touch-joystick-knob {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: oklch(0.9 0.02 250 / 0.7);
+  border: 2px solid oklch(0.7 0.02 250 / 0.6);
+  transition: transform 0.05s;
+}
+
+.touch-right {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+  z-index: 1;
+}
+
+.touch-jump {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: oklch(0.2 0.01 250 / 0.5);
+  border: 2px solid oklch(0.5 0.02 250 / 0.4);
+  color: oklch(0.9 0.01 250);
+  font-size: 20px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-jump:active {
+  background: oklch(0.35 0.02 250 / 0.6);
+  transform: scale(0.92);
+}
+
+.touch-place {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: oklch(0.25 0.06 140 / 0.5);
+  border: 2px solid oklch(0.5 0.08 140 / 0.4);
+  color: oklch(0.9 0.01 250);
+  font-size: 18px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-place:active {
+  background: oklch(0.4 0.08 140 / 0.6);
+  transform: scale(0.92);
+}
+
+.touch-pause {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: oklch(0.2 0.01 250 / 0.5);
+  border: 2px solid oklch(0.5 0.02 250 / 0.4);
+  color: oklch(0.9 0.01 250);
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-pause:active {
+  background: oklch(0.35 0.02 250 / 0.6);
+}
+
+@media (pointer: coarse) {
+  .crosshair {
+    width: 24px;
+    height: 24px;
+  }
+
+  .hotbar .slot {
+    min-width: 48px;
+    height: 48px;
+  }
+
+  .pause-menu button,
+  .side-panel button {
+    min-height: 48px;
+    font-size: 16px;
+  }
+}

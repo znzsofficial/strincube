@@ -571,14 +571,14 @@ export const blockMaterials = [
   ...createLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.3 })), // 122-127
   ...createSoulLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0x4488aa, emissiveIntensity: 0.3 })), // 128-133
   ...createTorchTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.4 })), // 134-139
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(basicStringUrl) }), // 140
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(stringSeaBeaconUrl) }), // 141
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(topologicalRingUrl) }), // 142
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(crystalCoreUrl) }), // 143
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(catTreatUrl) }), // 144
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(idealCoinUrl) }), // 145
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(purpleCatTreatUrl) }), // 146
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(diceUrl) }), // 147
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(basicStringUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 140
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(stringSeaBeaconUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 141
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(topologicalRingUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 142
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(crystalCoreUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 143
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(catTreatUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 144
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(idealCoinUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 145
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(purpleCatTreatUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 146
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(diceUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 147
   new THREE.MeshLambertMaterial({ map: createItemFrameTexture() }), // 148
   new THREE.MeshLambertMaterial({ map: createItemFrameTexture() }), // 148
   new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(basicStringUrl) }), // 149
@@ -740,7 +740,9 @@ export function itemFrameMaterialIndex(contents: number): number {
 export function isPlantBlock(type: BlockType) {
   return type === 'flower' || type === 'shortGrass' || type === 'fern' || type === 'deadBush' 
     || type === 'dandelion' || type === 'poppy' || type === 'allium' || type === 'blueOrchid'
-    || type === 'brownMushroom' || type === 'redMushroom';
+    || type === 'brownMushroom' || type === 'redMushroom'
+    || type === 'basicString' || type === 'stringSeaBeacon' || type === 'topologicalRing' || type === 'crystalCore'
+    || type === 'catTreat' || type === 'idealCoin' || type === 'purpleCatTreat' || type === 'dice';
 }
 
 export function isSolidBlock(type: BlockType) {

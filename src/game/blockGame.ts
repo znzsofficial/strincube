@@ -686,6 +686,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let visibleChunkRaycastDirty = true;
   let visibleChunkRaycastMeshes: THREE.Mesh[] = [];
   const keys = new Set<string>();
+  let touchMoveX = 0;
+  let touchMoveY = 0;
   const timer = new THREE.Timer();
   const gltfLoader = new GLTFLoader();
   const importedModelMaterials = new Set<THREE.Material>();
@@ -1810,8 +1812,10 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function updatePlayer(delta: number) {
     const speed = keys.has('shiftleft') || keys.has('shiftright') ? settings.moveSpeed * 1.58 : settings.moveSpeed;
-    const forward = Number(keys.has('keyw')) - Number(keys.has('keys'));
-    const right = Number(keys.has('keyd')) - Number(keys.has('keya'));
+    const kbForward = Number(keys.has('keyw')) - Number(keys.has('keys'));
+    const kbRight = Number(keys.has('keyd')) - Number(keys.has('keya'));
+    const forward = kbForward || touchMoveY;
+    const right = kbRight || touchMoveX;
     _tempDirection.set(right, 0, forward);
     if (_tempDirection.lengthSq() > 0) _tempDirection.normalize();
 
@@ -2388,6 +2392,15 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   function unlockControls() {
     keys.clear();
     controls.unlock();
+  }
+
+  function touchLock() {
+    keys.clear();
+    cameraYaw = camera.rotation.y;
+    cameraPitch = camera.rotation.x;
+    applyCameraRotation();
+    emitSnapshot(true);
+    try { screen.orientation?.lock?.('landscape'); } catch { /* ignore */ }
   }
 
   function onControlsLock() {
@@ -3181,6 +3194,72 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     emitSnapshot();
   }
 
+  function setTouchMove(x: number, y: number) {
+    touchMoveX = x;
+    touchMoveY = y;
+  }
+
+  function setTouchLook(dx: number, dy: number) {
+    const sensitivity = settings.mouseSensitivity * 0.003;
+    cameraYaw -= dx * sensitivity;
+    cameraPitch -= dy * sensitivity;
+    cameraPitch = THREE.MathUtils.clamp(cameraPitch, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+    applyCameraRotation();
+  }
+
+  function touchJump() {
+    if (canJump) {
+      physicalY = Math.max(physicalY, groundHeightAt(Math.round(camera.position.x), Math.round(camera.position.z), physicalY + 0.2));
+      verticalVelocity = 6.9;
+      canJump = false;
+    }
+  }
+
+  function touchTap(screenX: number, screenY: number) {
+    const ndc = new THREE.Vector2(
+      (screenX / window.innerWidth) * 2 - 1,
+      -(screenY / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(visibleChunkRaycastMeshes, false);
+    if (hits.length === 0) return;
+    const hit = hits[0];
+    const hitBlock = getHitBlock(hit);
+    if (!hitBlock) return;
+
+    if (hitBlock.block.type === 'itemFrame') {
+      const current = itemFrameContents.get(hitBlock.key);
+      if (current === selectedBlock) {
+        itemFrameContents.delete(hitBlock.key);
+        itemFrameMaterialCache.delete(hitBlock.key);
+      } else {
+        itemFrameContents.set(hitBlock.key, selectedBlock);
+      }
+      rebuildAroundBlock(hitBlock.block.position.x, hitBlock.block.position.z);
+      emitSnapshot();
+      return;
+    }
+
+    const { x, y, z } = hitBlock.block.position;
+    if (hitBlock.block.type === 'tnt') {
+      primeTnt(x, y, z);
+    } else {
+      removeBlockAt(x, y, z);
+    }
+    emitSnapshot();
+  }
+
+  function touchPlace(screenX: number, screenY: number) {
+    const ndc = new THREE.Vector2(
+      (screenX / window.innerWidth) * 2 - 1,
+      -(screenY / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(visibleChunkRaycastMeshes, false);
+    if (hits.length === 0) return;
+    placeBlock(hits[0]);
+  }
+
   return {
     setSelectedBlock,
     setSelectedModel,
@@ -3200,6 +3279,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     save,
     load,
     respawn,
+    setTouchMove,
+    setTouchLook,
+    touchJump,
+    touchTap,
+    touchPlace,
+    touchLock,
     dispose() {
       isDisposed = true;
       renderer.setAnimationLoop(null);

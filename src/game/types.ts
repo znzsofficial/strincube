@@ -171,5 +171,11 @@ export type BlockGameApi = {
   save: (name: string) => WorldSaveData;
   load: (data: WorldSaveData) => void;
   respawn: () => void;
+  setTouchMove: (x: number, y: number) => void;
+  setTouchLook: (dx: number, dy: number) => void;
+  touchJump: () => void;
+  touchTap: (screenX: number, screenY: number) => void;
+  touchPlace: (screenX: number, screenY: number) => void;
+  touchLock: () => void;
   dispose: () => void;
 };
