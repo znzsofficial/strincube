@@ -96,6 +96,9 @@
 }
 
 .touch-pause {
+  position: absolute;
+  top: 12px;
+  left: 12px;
   width: 44px;
   height: 44px;
   border-radius: 8px;
@@ -107,6 +110,7 @@
   place-items: center;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+  z-index: 1;
 }
 
 .touch-pause:active {

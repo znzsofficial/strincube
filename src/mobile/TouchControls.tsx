@@ -132,6 +132,10 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
     <div className="touch-controls">
       <div className="touch-look-area" ref={lookAreaRef} />
 
+      <button type="button" className="touch-pause" onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onPause(); }}>
+        <iconify-icon icon="lucide:menu" width="20"></iconify-icon>
+      </button>
+
       <div className="touch-joystick" ref={joystickRef}>
         <div className="touch-joystick-bg">
           <div className="touch-joystick-knob" ref={knobRef} />
@@ -140,17 +144,10 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
 
       <div className="touch-right">
         <button type="button" className="touch-jump" onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onJump(); }}>
-          跳
+          <iconify-icon icon="lucide:arrow-up" width="28"></iconify-icon>
         </button>
-        <button type="button" className="touch-place" onTouchStart={(e) => {
-          e.preventDefault(); e.stopPropagation();
-          const rect = e.currentTarget.getBoundingClientRect();
-          onPlace(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        }}>
-          放
-        </button>
-        <button type="button" className="touch-pause" onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onPause(); }}>
-          ❚❚
+        <button type="button" className="touch-place" onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); onPlace(window.innerWidth / 2, window.innerHeight / 2); }}>
+          <iconify-icon icon="lucide:box" width="24"></iconify-icon>
         </button>
       </div>
     </div>
