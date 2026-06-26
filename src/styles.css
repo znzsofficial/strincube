@@ -16,7 +16,7 @@
   --menu-warn: oklch(0.88 0.13 85);
   --shadow-hard: 0 4px 0 oklch(0.13 0.016 250);
   --z-hud: 10;
-  --z-hotbar: 20;
+  --z-hotbar: 60;
   --z-crosshair: 30;
   --z-panel: 40;
 }

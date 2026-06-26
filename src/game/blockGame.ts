@@ -2404,7 +2404,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     applyCameraRotation();
     emitSnapshot(true);
     try {
-      mount.requestFullscreen?.();
+      document.documentElement.requestFullscreen?.();
       screen.orientation?.lock?.('landscape');
     } catch { /* ignore */ }
   }
