@@ -40,7 +40,7 @@ type GameScreen = 'title' | 'loading' | 'game';
 type InventoryItem = { type: 'block'; block: BlockType } | { type: 'model'; model: ImportedModelItem };
 const initialHotbarItems: InventoryItem[] = blockItems.slice(0, 9).map((block) => ({ type: 'block', block }));
 
-const SAVE_KEY_PREFIX = 'calabiyau_save_';
+const SAVE_KEY_PREFIX = 'strincube_save_';
 
 function getSaveMetaList(): { id: string; name: string; savedAt: number }[] {
   const list: { id: string; name: string; savedAt: number }[] = [];
@@ -539,7 +539,7 @@ export function App() {
           <div className="title-logo">
             <Cuboid size={52} className="title-icon" />
           </div>
-          <h1>Calabiyau Blocks</h1>
+          <h1>StrinCube</h1>
           <p className="title-subtitle">一个可爱的方块世界</p>
           {showWorldSettings ? (
             <div className="world-settings">
@@ -675,7 +675,7 @@ export function App() {
       {!snapshot.isLocked && !snapshot.isDead && overlay === 'menu' && (
         <section className="pause-menu" aria-label="暂停菜单">
           <Cuboid size={34} aria-hidden="true" />
-          <h1>Calabiyau Blocks</h1>
+          <h1>StrinCube</h1>
           <button type="button" onClick={requestGameLock}>回到游戏</button>
           <button type="button" onClick={() => openOverlayPanel('inventory')}>背包</button>
           <button type="button" onClick={() => openOverlayPanel('settings')}>设置</button>
