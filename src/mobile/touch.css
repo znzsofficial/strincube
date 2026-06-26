@@ -18,7 +18,7 @@
 .touch-joystick {
   position: absolute;
   left: 24px;
-  bottom: 24px;
+  bottom: 80px;
   width: 120px;
   height: 120px;
   z-index: 1;
@@ -47,7 +47,7 @@
 .touch-right {
   position: absolute;
   right: 24px;
-  bottom: 24px;
+  bottom: 80px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

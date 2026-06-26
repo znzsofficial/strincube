@@ -688,6 +688,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const keys = new Set<string>();
   let touchMoveX = 0;
   let touchMoveY = 0;
+  let touchActive = false;
   const timer = new THREE.Timer();
   const gltfLoader = new GLTFLoader();
   const importedModelMaterials = new Set<THREE.Material>();
@@ -2283,7 +2284,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     updateWater(delta);
     rebuildDirtyWaterChunks();
     updateSelectedModelHelper();
-    if (controls.isLocked) updatePlayer(delta);
+    if (controls.isLocked || touchActive) updatePlayer(delta);
     renderer.render(scene, camera);
   }
 
@@ -2391,16 +2392,21 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function unlockControls() {
     keys.clear();
+    touchActive = false;
     controls.unlock();
   }
 
   function touchLock() {
     keys.clear();
+    touchActive = true;
     cameraYaw = camera.rotation.y;
     cameraPitch = camera.rotation.x;
     applyCameraRotation();
     emitSnapshot(true);
-    try { screen.orientation?.lock?.('landscape'); } catch { /* ignore */ }
+    try {
+      mount.requestFullscreen?.();
+      screen.orientation?.lock?.('landscape');
+    } catch { /* ignore */ }
   }
 
   function onControlsLock() {
