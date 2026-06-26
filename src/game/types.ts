@@ -141,6 +141,7 @@ export type WorldSaveData = {
     parts: { id: string; name: string; opacity: number; visible: boolean }[];
   }[];
   importedModels: { id: string; name: string; kind: 'generic' | 'mmd' }[];
+  itemFrameContents: [string, string][];
 };
 
 // ──── Options / API ────

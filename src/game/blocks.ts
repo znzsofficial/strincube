@@ -27,7 +27,10 @@ export type BlockType =
   | 'coalBlock' | 'ironBlock' | 'goldBlock' | 'diamondBlock' | 'emeraldBlock' | 'lapisBlock' | 'redstoneBlock'
   | 'calcite' | 'dripstone' | 'tuff'
   | 'brownMushroom' | 'redMushroom' | 'cactus' | 'pumpkin' | 'melon'
-  | 'hay' | 'lantern' | 'soulLantern' | 'torch';
+  | 'hay' | 'lantern' | 'soulLantern' | 'torch'
+  | 'basicString' | 'stringSeaBeacon' | 'topologicalRing' | 'crystalCore'
+  | 'catTreat' | 'idealCoin' | 'purpleCatTreat' | 'dice'
+  | 'itemFrame';
 
 // Texture Imports
 import acaciaLogUrl from '../../assets/minecraft/textures/block/acacia_log.png';
@@ -153,6 +156,14 @@ import hayTopUrl from '../../assets/minecraft/textures/block/hay_block_top.png';
 import tntSideUrl from '../../assets/minecraft/textures/block/tnt_side.png';
 import tntTopUrl from '../../assets/minecraft/textures/block/tnt_top.png';
 import tntBottomUrl from '../../assets/minecraft/textures/block/tnt_bottom.png';
+import basicStringUrl from '../assets/items/基弦.png';
+import stringSeaBeaconUrl from '../assets/items/弦海信标.png';
+import topologicalRingUrl from '../assets/items/拓扑晶环.png';
+import crystalCoreUrl from '../assets/items/晶核.png';
+import catTreatUrl from '../assets/items/猫条.png';
+import idealCoinUrl from '../assets/items/理想币.png';
+import purpleCatTreatUrl from '../assets/items/紫猫条.png';
+import diceUrl from '../assets/items/骰子.png';
 
 // Texture Loading Helpers
 export function loadBlockTexture(url: string) {
@@ -342,6 +353,96 @@ export function createSoulLanternTextures(): THREE.CanvasTexture[] {
   return [side, side, top, bottom, side, side];
 }
 
+function makeCoinTexture(draw: (ctx: CanvasRenderingContext2D) => void, size = 16): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  draw(ctx);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  return t;
+}
+
+export function createGoldCoinTexture() {
+  return makeCoinTexture(ctx => {
+    ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#daa520'; ctx.beginPath(); ctx.arc(8, 8, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(7, 7, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b8860b'; ctx.fillRect(7, 4, 2, 8);
+  });
+}
+
+export function createSilverCoinTexture() {
+  return makeCoinTexture(ctx => {
+    ctx.fillStyle = '#6e6e6e'; ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#a0a0a0'; ctx.beginPath(); ctx.arc(8, 8, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d0d0d0'; ctx.beginPath(); ctx.arc(7, 7, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6e6e6e'; ctx.fillRect(7, 4, 2, 8);
+  });
+}
+
+export function createCopperCoinTexture() {
+  return makeCoinTexture(ctx => {
+    ctx.fillStyle = '#8b4513'; ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b87333'; ctx.beginPath(); ctx.arc(8, 8, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#da8a67'; ctx.beginPath(); ctx.arc(7, 7, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8b4513'; ctx.fillRect(7, 4, 2, 8);
+  });
+}
+
+export function createEmeraldCoinTexture() {
+  return makeCoinTexture(ctx => {
+    ctx.fillStyle = '#04630c'; ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0a8c1a'; ctx.beginPath(); ctx.arc(8, 8, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#50c878'; ctx.beginPath(); ctx.arc(7, 7, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#04630c'; ctx.fillRect(7, 4, 2, 8);
+  });
+}
+
+export function createItemFrameTexture() {
+  return makeCoinTexture(ctx => {
+    ctx.fillStyle = '#8b6914';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#6b4c12';
+    ctx.fillRect(0, 0, 64, 8);
+    ctx.fillRect(0, 56, 64, 8);
+    ctx.fillRect(0, 0, 8, 64);
+    ctx.fillRect(56, 0, 8, 64);
+    ctx.fillStyle = '#a07818';
+    ctx.fillRect(2, 2, 2, 60);
+    ctx.fillRect(2, 2, 60, 2);
+    ctx.fillStyle = '#f5deb3';
+    ctx.fillRect(10, 10, 44, 44);
+    ctx.fillStyle = '#e8d09a';
+    ctx.fillRect(12, 12, 40, 40);
+  }, 64);
+}
+
+export function createItemFrameWithItemTexture(itemUrl: string): THREE.CanvasTexture {
+  const frame = createItemFrameTexture();
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(frame.image as HTMLCanvasElement, 0, 0);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.drawImage(frame.image as HTMLCanvasElement, 0, 0);
+    ctx.drawImage(img, 10, 10, 44, 44);
+    texture.needsUpdate = true;
+  };
+  img.src = itemUrl;
+  return texture;
+}
+
 // Block Materials
 export const blockMaterials = [
   new THREE.MeshLambertMaterial({ color: 0x73b84a, map: loadBlockTexture(grassTopUrl), emissive: 0x14350d, emissiveIntensity: 0.04 }), // 0
@@ -470,6 +571,24 @@ export const blockMaterials = [
   ...createLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.3 })), // 122-127
   ...createSoulLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0x4488aa, emissiveIntensity: 0.3 })), // 128-133
   ...createTorchTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.4 })), // 134-139
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(basicStringUrl) }), // 140
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(stringSeaBeaconUrl) }), // 141
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(topologicalRingUrl) }), // 142
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(crystalCoreUrl) }), // 143
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(catTreatUrl) }), // 144
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(idealCoinUrl) }), // 145
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(purpleCatTreatUrl) }), // 146
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(diceUrl) }), // 147
+  new THREE.MeshLambertMaterial({ map: createItemFrameTexture() }), // 148
+  new THREE.MeshLambertMaterial({ map: createItemFrameTexture() }), // 148
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(basicStringUrl) }), // 149
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(stringSeaBeaconUrl) }), // 150
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(topologicalRingUrl) }), // 151
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(crystalCoreUrl) }), // 152
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(catTreatUrl) }), // 153
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(idealCoinUrl) }), // 154
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(purpleCatTreatUrl) }), // 155
+  new THREE.MeshLambertMaterial({ map: createItemFrameWithItemTexture(diceUrl) }), // 156
 ];
 
 // Material Index Mapping
@@ -601,7 +720,20 @@ export function materialIndexFor(type: BlockType, normal: THREE.Vector3) {
     if (normal.z > 0.5) return 138;
     return 139;
   }
+  if (type === 'basicString') return 140;
+  if (type === 'stringSeaBeacon') return 141;
+  if (type === 'topologicalRing') return 142;
+  if (type === 'crystalCore') return 143;
+  if (type === 'catTreat') return 144;
+  if (type === 'idealCoin') return 145;
+  if (type === 'purpleCatTreat') return 146;
+  if (type === 'dice') return 147;
+  if (type === 'itemFrame') return 148;
   return 7;
+}
+
+export function itemFrameMaterialIndex(contents: number): number {
+  return 148 + contents;
 }
 
 // Block Category Helpers
@@ -739,6 +871,15 @@ export const blockLabels: Record<BlockType, string> = {
   lantern: '灯笼',
   soulLantern: '灵魂灯笼',
   torch: '火把',
+  basicString: '基弦',
+  stringSeaBeacon: '弦海信标',
+  topologicalRing: '拓扑晶环',
+  crystalCore: '晶核',
+  catTreat: '猫条',
+  idealCoin: '理想币',
+  purpleCatTreat: '紫猫条',
+  dice: '骰子',
+  itemFrame: '物品展示框',
 };
 
 // UI Icon URLs
@@ -885,6 +1026,23 @@ export const blockIconUrls: Record<BlockType, string> = {
     x.fillStyle = '#55ccee'; x.fillRect(6, 4, 4, 8);
     x.fillStyle = '#a0eeff'; x.fillRect(7, 5, 2, 6);
     x.fillStyle = '#6a6a6a'; x.fillRect(6, 0, 4, 1); x.fillRect(6, 15, 4, 1); x.fillRect(2, 7, 1, 2); x.fillRect(13, 7, 1, 2);
+    return c.toDataURL();
+  })(),
+  basicString: basicStringUrl,
+  stringSeaBeacon: stringSeaBeaconUrl,
+  topologicalRing: topologicalRingUrl,
+  crystalCore: crystalCoreUrl,
+  catTreat: catTreatUrl,
+  idealCoin: idealCoinUrl,
+  purpleCatTreat: purpleCatTreatUrl,
+  dice: diceUrl,
+  itemFrame: (() => {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#8b6914'; x.fillRect(0, 0, 16, 16);
+    x.fillStyle = '#6b4c12'; x.fillRect(0, 0, 16, 2); x.fillRect(0, 14, 16, 2); x.fillRect(0, 0, 2, 16); x.fillRect(14, 0, 2, 16);
+    x.fillStyle = '#a07818'; x.fillRect(1, 1, 1, 14); x.fillRect(1, 1, 14, 1);
+    x.fillStyle = '#f5deb3'; x.fillRect(3, 3, 10, 10);
     return c.toDataURL();
   })(),
 };

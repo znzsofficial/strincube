@@ -63,7 +63,7 @@ src/
 
 ## Texture Assets
 
-Block textures are sourced from Minecraft's resource packs and are **not included** in this repository due to copyright. Place the `assets/` directory (containing `minecraft/textures/block/`) in the project root for textures to load.
+Block textures use [Pixel Perfection Legacy](https://www.planetminecraft.com/texture-pack/pixel-perfection-legacy/), a free Minecraft resource pack. Some textures are procedurally generated in code (torches, lanterns, item frames, coins).
 
 ## Tech Stack
 

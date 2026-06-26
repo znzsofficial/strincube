@@ -5,10 +5,12 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {
   type BlockType,
   blockMaterials,
+  blockIconUrls,
   materialIndexFor,
   isPlantBlock,
   isTransparentBlock,
   loadBlockTexture,
+  createItemFrameTexture,
   waterMaterial,
   pickPlant as pickPlantFromRegistry,
 } from './blocks';
@@ -456,6 +458,19 @@ const torchFaceDefs = (() => {
   ];
 })();
 
+const itemFrameFaceDefs = (() => {
+  const h = 0.4375;
+  const d = 0.0625;
+  return [
+    { normal: new THREE.Vector3(1, 0, 0), corners: [[d, -h, -h], [d, h, -h], [d, h, h], [d, -h, h]] },
+    { normal: new THREE.Vector3(-1, 0, 0), corners: [[-d, -h, h], [-d, h, h], [-d, h, -h], [-d, -h, -h]] },
+    { normal: new THREE.Vector3(0, 1, 0), corners: [[-d, h, h], [d, h, h], [d, h, -h], [-d, h, -h]] },
+    { normal: new THREE.Vector3(0, -1, 0), corners: [[-d, -h, -h], [d, -h, -h], [d, -h, h], [-d, -h, h]] },
+    { normal: new THREE.Vector3(0, 0, 1), corners: [[d, -h, h], [d, h, h], [-d, h, h], [-d, -h, h]] },
+    { normal: new THREE.Vector3(0, 0, -1), corners: [[-d, -h, -h], [-d, h, -h], [d, h, -h], [d, -h, -h]] },
+  ];
+})();
+
 const flowerFaceDefs = [
   { normal: new THREE.Vector3(0.7, 0, 0.7).normalize(), corners: [[-0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0.5]] },
   { normal: new THREE.Vector3(-0.7, 0, 0.7).normalize(), corners: [[0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, 0.5], [-0.5, -0.5, 0.5]] },
@@ -608,6 +623,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const blocks = new Map<string, BlockData>();
   const waterCells = new Map<string, WaterCell>();
   const blockLights = new Map<string, THREE.PointLight>();
+  const itemFrameContents = new Map<string, BlockType>();
+  const itemFrameMaterialCache = new Map<string, THREE.MeshLambertMaterial>();
   const columnSolidY = new Map<string, Set<number>>();
   const chunkMeshes = new Map<string, ChunkMesh>();
   const waterChunkMeshes = new Map<string, WaterChunkMesh>();
@@ -1095,6 +1112,45 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     visibleChunkRaycastDirty = true;
   }
 
+  function getItemFrameMaterialIndex(key: string): number {
+    const contents = itemFrameContents.get(key);
+    if (!contents) return 148;
+
+    const cached = itemFrameMaterialCache.get(key);
+    if (cached) {
+      const idx = blockMaterials.indexOf(cached);
+      if (idx >= 0) return idx;
+    }
+
+    const textureUrl = blockIconUrls[contents];
+    if (!textureUrl) return 148;
+
+    const frameCanvas = createItemFrameTexture().image as HTMLCanvasElement;
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(frameCanvas, 0, 0);
+    const texture = new THREE.CanvasTexture(c);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(frameCanvas, 0, 0);
+      ctx.drawImage(img, 10, 10, 44, 44);
+      texture.needsUpdate = true;
+    };
+    img.src = textureUrl;
+
+    const material = new THREE.MeshLambertMaterial({ map: texture });
+    const idx = blockMaterials.length;
+    (blockMaterials as THREE.Material[]).push(material);
+    itemFrameMaterialCache.set(key, material);
+    return idx;
+  }
+
   function rebuildChunk(chunkKey: string) {
     removeChunkMesh(chunkKey);
 
@@ -1136,15 +1192,16 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
       const isLantern = block.type === 'lantern' || block.type === 'soulLantern';
       const isTorch = block.type === 'torch';
-      const activeFaceDefs = isLantern ? lanternFaceDefs : isTorch ? torchFaceDefs : faceDefs;
+      const isItemFrame = block.type === 'itemFrame';
+      const activeFaceDefs = isLantern ? lanternFaceDefs : isTorch ? torchFaceDefs : isItemFrame ? itemFrameFaceDefs : faceDefs;
 
       for (const face of activeFaceDefs) {
         const nx = block.position.x + face.normal.x;
         const ny = block.position.y + face.normal.y;
         const nz = block.position.z + face.normal.z;
         const neighbor = blocks.get(keyOf(nx, ny, nz));
-        const neighborIsSmall = neighbor && (neighbor.type === 'lantern' || neighbor.type === 'soulLantern' || neighbor.type === 'torch');
-        if (!isLantern && !isTorch && neighbor && !isPlantBlock(neighbor.type) && !neighborIsSmall) {
+        const neighborIsSmall = neighbor && (neighbor.type === 'lantern' || neighbor.type === 'soulLantern' || neighbor.type === 'torch' || neighbor.type === 'itemFrame');
+        if (!isLantern && !isTorch && !isItemFrame && neighbor && !isPlantBlock(neighbor.type) && !neighborIsSmall) {
           const blockTransparent = isTransparentBlock(block.type);
           const neighborTransparent = isTransparentBlock(neighbor.type);
           if (!blockTransparent && !neighborTransparent) continue;
@@ -1159,7 +1216,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         }
         build.uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
 
-        const materialIndex = materialIndexFor(block.type, face.normal);
+        const materialIndex = block.type === 'itemFrame'
+          ? getItemFrameMaterialIndex(key)
+          : materialIndexFor(block.type, face.normal);
         const faceIndices = [build.vertexCount, build.vertexCount + 1, build.vertexCount + 2, build.vertexCount, build.vertexCount + 2, build.vertexCount + 3];
         pushFace(build, materialIndex, faceIndices, key);
         build.vertexCount += 4;
@@ -1721,7 +1780,22 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function placeBlock(hit: THREE.Intersection) {
     if (!hit.face) return;
+
     const hitBlock = getHitBlock(hit);
+
+    if (hitBlock && hitBlock.block.type === 'itemFrame') {
+      const current = itemFrameContents.get(hitBlock.key);
+      if (current === selectedBlock) {
+        itemFrameContents.delete(hitBlock.key);
+        itemFrameMaterialCache.delete(hitBlock.key);
+      } else {
+        itemFrameContents.set(hitBlock.key, selectedBlock);
+      }
+      rebuildAroundBlock(hitBlock.block.position.x, hitBlock.block.position.z);
+      emitSnapshot();
+      return;
+    }
+
     if (!hitBlock) return;
     const target = rounded(hitBlock.block.position.clone().add(hit.face.normal));
     const player = controls.object.position;
@@ -3015,6 +3089,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       activeSlot: 0,
       placedModels: placed,
       importedModels: imported,
+      itemFrameContents: [...itemFrameContents.entries()],
     };
   }
 
@@ -3076,6 +3151,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         scene.add(light);
         blockLights.set(key, light);
       }
+    }
+
+    itemFrameContents.clear();
+    itemFrameMaterialCache.clear();
+    if (data.itemFrameContents) {
+      for (const [key, val] of data.itemFrameContents) itemFrameContents.set(key, val as BlockType);
     }
 
     blockMeshesReady = true;
