@@ -909,7 +909,7 @@ input:focus-visible {
   background-image: var(--item-texture);
   background-position: center;
   background-size: cover;
-  background-blend-mode: multiply;
+  background-blend-mode: var(--item-blend, normal);
   image-rendering: pixelated;
   box-shadow: inset -7px -7px 0 oklch(0 0 0 / 0.16), inset 6px 6px 0 oklch(1 0 0 / 0.18);
 }

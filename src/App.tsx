@@ -106,6 +106,7 @@ export function App() {
     breakSpeed: 1,
     showFps: false,
     timeOfDay: 0.28,
+    infiniteWaterSpread: false,
     rendererBackend: 'webgl',
   });
   const [worldGenSettings, setWorldGenSettings] = useState<WorldGenSettings>(defaultWorldGenSettings);
@@ -174,6 +175,7 @@ export function App() {
 
   function confirmStartNewWorld() {
     pendingSaveRef.current = null;
+    currentSaveIdRef.current = null;
     setShowWorldSettings(false);
     setScreen('loading');
     setLoadingProgress({ label: '准备创建世界', progress: 0 });
@@ -183,14 +185,16 @@ export function App() {
     const game = gameRef.current;
     if (!game) return;
     const now = new Date();
-    const name = `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const id = currentSaveIdRef.current ?? `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const existing = currentSaveIdRef.current ? loadSaveData(id) : null;
+    const name = existing?.name ?? `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
     const data = game.save(name);
     data.hotbar = hotbarItemsRef.current.map(item =>
       item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', modelId: item.model.id }
     );
     data.activeSlot = activeSlotRef.current;
     storeSaveData(id, data);
+    currentSaveIdRef.current = id;
     setSaveMetaList(getSaveMetaList());
     setSaveStatus('已保存');
     window.setTimeout(() => setSaveStatus(''), 2000);
@@ -199,6 +203,7 @@ export function App() {
   function loadGameFromId(id: string) {
     const data = loadSaveData(id);
     if (!data) return;
+    currentSaveIdRef.current = id;
     setWorldSeed(data.seed);
     if (data.worldGen) setWorldGenSettings(data.worldGen);
     setScreen('loading');
@@ -217,11 +222,13 @@ export function App() {
       gameRef.current = null;
     }
     pendingSaveRef.current = null;
+    currentSaveIdRef.current = null;
     setSaveMetaList(getSaveMetaList());
     setScreen('title');
   }
 
   const pendingSaveRef = useRef<WorldSaveData | null>(null);
+  const currentSaveIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (screen !== 'loading' || !mountRef.current) return;
@@ -443,7 +450,7 @@ export function App() {
     if (!texture && !tint) return undefined;
     const style: Record<string, string> = {};
     if (texture) style['--item-texture'] = `url(${texture})`;
-    if (tint) style['--item-tint'] = tint;
+    if (tint) { style['--item-tint'] = tint; style['--item-blend'] = 'multiply'; }
     return style as React.CSSProperties;
   }
 
@@ -765,6 +772,7 @@ export function App() {
           <label><Cuboid size={15} aria-hidden="true" /> 模型亮度 <input type="range" min="0.35" max="1.25" step="0.05" value={settings.modelBrightness} onChange={(event) => updateSetting('modelBrightness', Number(event.target.value))} /></label>
           <label className="toggle-row"><input type="checkbox" checked={settings.shadows} onChange={(event) => updateSetting('shadows', event.target.checked)} /> 阴影</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.showFps} onChange={(event) => updateSetting('showFps', event.target.checked)} /> 显示帧数</label>
+          <label className="toggle-row"><input type="checkbox" checked={settings.infiniteWaterSpread} onChange={(event) => updateSetting('infiniteWaterSpread', event.target.checked)} /> 水流无限蔓延</label>
           <button type="button" className="panel-command" onClick={returnToMenu}>返回菜单</button>
         </section>
       )}

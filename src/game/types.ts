@@ -14,6 +14,7 @@ export type GameSettings = {
   breakSpeed: number;
   showFps: boolean;
   timeOfDay: number;
+  infiniteWaterSpread: boolean;
   rendererBackend: 'webgl' | 'webgpu';
 };
 

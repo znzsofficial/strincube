@@ -176,7 +176,7 @@ const uiKeyCodes = new Set(['Escape', 'KeyE', 'KeyM', 'KeyO']);
 const chunkSize = 8;
 let worldRadius = 80;
 const waterLevel = 1;
-const maxWaterSpreadDistance = 6;
+const maxWaterSpreadDistance = 7;
 const worldBottom = -8;
 const playerHeight = 1.7;
 
@@ -428,6 +428,34 @@ const faceDefs = [
   { normal: new THREE.Vector3(0, 0, -1), corners: [[-0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5], [0.5, -0.5, -0.5]] },
 ];
 
+const lanternFaceDefs = (() => {
+  const h = 0.1875;
+  const b = -0.5;
+  const t = b + 0.4375;
+  return [
+    { normal: new THREE.Vector3(1, 0, 0), corners: [[h, b, -h], [h, t, -h], [h, t, h], [h, b, h]] },
+    { normal: new THREE.Vector3(-1, 0, 0), corners: [[-h, b, h], [-h, t, h], [-h, t, -h], [-h, b, -h]] },
+    { normal: new THREE.Vector3(0, 1, 0), corners: [[-h, t, h], [h, t, h], [h, t, -h], [-h, t, -h]] },
+    { normal: new THREE.Vector3(0, -1, 0), corners: [[-h, b, -h], [h, b, -h], [h, b, h], [-h, b, h]] },
+    { normal: new THREE.Vector3(0, 0, 1), corners: [[h, b, h], [h, t, h], [-h, t, h], [-h, b, h]] },
+    { normal: new THREE.Vector3(0, 0, -1), corners: [[-h, b, -h], [-h, t, -h], [h, t, -h], [h, b, -h]] },
+  ];
+})();
+
+const torchFaceDefs = (() => {
+  const r = 0.0625;
+  const b = -0.5;
+  const t = b + 0.625;
+  return [
+    { normal: new THREE.Vector3(1, 0, 0), corners: [[r, b, -r], [r, t, -r], [r, t, r], [r, b, r]] },
+    { normal: new THREE.Vector3(-1, 0, 0), corners: [[-r, b, r], [-r, t, r], [-r, t, -r], [-r, b, -r]] },
+    { normal: new THREE.Vector3(0, 1, 0), corners: [[-r, t, r], [r, t, r], [r, t, -r], [-r, t, -r]] },
+    { normal: new THREE.Vector3(0, -1, 0), corners: [[-r, b, -r], [r, b, -r], [r, b, r], [-r, b, r]] },
+    { normal: new THREE.Vector3(0, 0, 1), corners: [[r, b, r], [r, t, r], [-r, t, r], [-r, b, r]] },
+    { normal: new THREE.Vector3(0, 0, -1), corners: [[-r, b, -r], [-r, t, -r], [r, t, -r], [r, b, -r]] },
+  ];
+})();
+
 const flowerFaceDefs = [
   { normal: new THREE.Vector3(0.7, 0, 0.7).normalize(), corners: [[-0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0.5]] },
   { normal: new THREE.Vector3(-0.7, 0, 0.7).normalize(), corners: [[0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, 0.5], [-0.5, -0.5, 0.5]] },
@@ -500,6 +528,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     breakSpeed: 1,
     showFps: false,
     timeOfDay: 0.28,
+    infiniteWaterSpread: false,
     rendererBackend,
   };
 
@@ -578,6 +607,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   const blocks = new Map<string, BlockData>();
   const waterCells = new Map<string, WaterCell>();
+  const blockLights = new Map<string, THREE.PointLight>();
   const columnSolidY = new Map<string, Set<number>>();
   const chunkMeshes = new Map<string, ChunkMesh>();
   const waterChunkMeshes = new Map<string, WaterChunkMesh>();
@@ -1104,12 +1134,17 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         continue;
       }
 
-      for (const face of faceDefs) {
+      const isLantern = block.type === 'lantern' || block.type === 'soulLantern';
+      const isTorch = block.type === 'torch';
+      const activeFaceDefs = isLantern ? lanternFaceDefs : isTorch ? torchFaceDefs : faceDefs;
+
+      for (const face of activeFaceDefs) {
         const nx = block.position.x + face.normal.x;
         const ny = block.position.y + face.normal.y;
         const nz = block.position.z + face.normal.z;
         const neighbor = blocks.get(keyOf(nx, ny, nz));
-        if (neighbor && !isPlantBlock(neighbor.type)) {
+        const neighborIsSmall = neighbor && (neighbor.type === 'lantern' || neighbor.type === 'soulLantern' || neighbor.type === 'torch');
+        if (!isLantern && !isTorch && neighbor && !isPlantBlock(neighbor.type) && !neighborIsSmall) {
           const blockTransparent = isTransparentBlock(block.type);
           const neighborTransparent = isTransparentBlock(neighbor.type);
           if (!blockTransparent && !neighborTransparent) continue;
@@ -1255,6 +1290,33 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     queueFallingCheck(x, y + 1, z - 1);
   }
 
+  function lightConfig(type: BlockType): { color: number; intensity: number; distance: number } | null {
+    if (type === 'lantern') return { color: 0xffaa44, intensity: 1.8, distance: 10 };
+    if (type === 'soulLantern') return { color: 0x44aacc, intensity: 1.4, distance: 8 };
+    if (type === 'torch') return { color: 0xffcc66, intensity: 2.0, distance: 12 };
+    return null;
+  }
+
+  function addBlockLight(x: number, y: number, z: number, type: BlockType) {
+    const cfg = lightConfig(type);
+    if (!cfg) return;
+    const key = keyOf(x, y, z);
+    if (blockLights.has(key)) return;
+    const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
+    light.position.set(x, y + 0.2, z);
+    scene.add(light);
+    blockLights.set(key, light);
+  }
+
+  function removeBlockLight(x: number, y: number, z: number) {
+    const key = keyOf(x, y, z);
+    const light = blockLights.get(key);
+    if (!light) return;
+    scene.remove(light);
+    light.dispose();
+    blockLights.delete(key);
+  }
+
   function addBlock(x: number, y: number, z: number, type: BlockType, waterDistance = 0) {
     if (type === 'water') {
       addWaterCell(x, y, z, waterDistance);
@@ -1270,6 +1332,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     if (isFallingBlock(type)) queueFallingCheck(x, y, z);
     queueWaterNeighbors(x, y, z);
     if (blockMeshesReady) rebuildAroundBlock(x, z);
+    addBlockLight(x, y, z, type);
   }
 
   function removeBlockAt(x: number, y: number, z: number, rebuild = true) {
@@ -1281,6 +1344,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     queueWaterNeighbors(x, y, z);
     queueFallingNeighbors(x, y, z);
     if (rebuild) rebuildAroundBlock(x, z);
+    removeBlockLight(x, block.position.y, z);
     return block;
   }
 
@@ -1296,8 +1360,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const removed = removeBlockAt(x, y, z, false);
     if (!removed || removed.type !== 'tnt') return;
     if (blockMeshesReady) rebuildAroundBlock(x, z);
-    const materialIndex = materialIndexFor('tnt', new THREE.Vector3(0, 1, 0));
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.92, 0.92), blockMaterials[materialIndex]);
+    const tntMaterials = [
+      blockMaterials[78], blockMaterials[78],
+      blockMaterials[79], blockMaterials[80],
+      blockMaterials[78], blockMaterials[78],
+    ];
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.92, 0.92), tntMaterials);
     mesh.castShadow = settings.shadows;
     mesh.receiveShadow = true;
     mesh.position.set(x, y, z);
@@ -1929,7 +1997,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       tnt.timer -= delta;
       tnt.flash += delta;
       tnt.mesh.position.y = tnt.position.y + Math.sin(tnt.flash * 16) * 0.04;
-      tnt.mesh.material = Math.floor(tnt.flash * 8) % 2 === 0 ? tntFlashMaterial : blockMaterials[materialIndexFor('tnt', new THREE.Vector3(0, 1, 0))];
+      tnt.mesh.material = Math.floor(tnt.flash * 8) % 2 === 0
+        ? [tntFlashMaterial, tntFlashMaterial, tntFlashMaterial, tntFlashMaterial, tntFlashMaterial, tntFlashMaterial]
+        : [blockMaterials[78], blockMaterials[78], blockMaterials[79], blockMaterials[80], blockMaterials[78], blockMaterials[78]];
       if (tnt.timer > 0) continue;
       scene.remove(tnt.mesh);
       tnt.mesh.geometry.dispose();
@@ -2035,50 +2105,60 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const waterZP = waterCells.get(keyZP);
     const waterZM = waterCells.get(keyZM);
 
-    if ((!blockXP || isPlantBlock(blockXP.type)) && (!waterXP || waterXP.level < nextLevel)) {
-      if (blockXP && isReplaceableBlock(blockXP.type)) removeBlockAt(nxPlus, y, z, false);
-      addWaterCell(nxPlus, y, z, distance + 1, nextLevel, false);
-    }
-    if ((!blockXM || isPlantBlock(blockXM.type)) && (!waterXM || waterXM.level < nextLevel)) {
-      if (blockXM && isReplaceableBlock(blockXM.type)) removeBlockAt(nxMinus, y, z, false);
-      addWaterCell(nxMinus, y, z, distance + 1, nextLevel, false);
-    }
-    if ((!blockZP || isPlantBlock(blockZP.type)) && (!waterZP || waterZP.level < nextLevel)) {
-      if (blockZP && isReplaceableBlock(blockZP.type)) removeBlockAt(x, y, nzPlus, false);
-      addWaterCell(x, y, nzPlus, distance + 1, nextLevel, false);
-    }
-    if ((!blockZM || isPlantBlock(blockZM.type)) && (!waterZM || waterZM.level < nextLevel)) {
-      if (blockZM && isReplaceableBlock(blockZM.type)) removeBlockAt(x, y, nzMinus, false);
-      addWaterCell(x, y, nzMinus, distance + 1, nextLevel, false);
+    const isVoidBelow = (tx: number, tz: number) => {
+      for (let cy = y - 1; cy >= worldBottom; cy--) {
+        if (blocks.has(keyOf(tx, cy, tz))) return false;
+      }
+      return true;
+    };
+
+    const anyNeighborVoid = !settings.infiniteWaterSpread && (
+      (!blockXP && isVoidBelow(nxPlus, z)) ||
+      (!blockXM && isVoidBelow(nxMinus, z)) ||
+      (!blockZP && isVoidBelow(x, nzPlus)) ||
+      (!blockZM && isVoidBelow(x, nzMinus))
+    );
+
+    if (!anyNeighborVoid) {
+      if ((!blockXP || isPlantBlock(blockXP.type)) && (!waterXP || waterXP.level < nextLevel)) {
+        if (blockXP && isReplaceableBlock(blockXP.type)) removeBlockAt(nxPlus, y, z, false);
+        addWaterCell(nxPlus, y, z, distance + 1, nextLevel, false);
+      }
+      if ((!blockXM || isPlantBlock(blockXM.type)) && (!waterXM || waterXM.level < nextLevel)) {
+        if (blockXM && isReplaceableBlock(blockXM.type)) removeBlockAt(nxMinus, y, z, false);
+        addWaterCell(nxMinus, y, z, distance + 1, nextLevel, false);
+      }
+      if ((!blockZP || isPlantBlock(blockZP.type)) && (!waterZP || waterZP.level < nextLevel)) {
+        if (blockZP && isReplaceableBlock(blockZP.type)) removeBlockAt(x, y, nzPlus, false);
+        addWaterCell(x, y, nzPlus, distance + 1, nextLevel, false);
+      }
+      if ((!blockZM || isPlantBlock(blockZM.type)) && (!waterZM || waterZM.level < nextLevel)) {
+        if (blockZM && isReplaceableBlock(blockZM.type)) removeBlockAt(x, y, nzMinus, false);
+        addWaterCell(x, y, nzMinus, distance + 1, nextLevel, false);
+      }
     }
   }
 
   function updateWater(delta: number) {
     waterUpdateTimer += delta;
-    if (waterUpdateTimer < 0.03) return;
+    if (waterUpdateTimer < 0.25) return;
     waterUpdateTimer = 0;
 
-    const batch = Math.min(waterUpdates.length, 80);
-    for (let i = 0; i < batch; i += 1) {
-      const key = waterUpdates.shift();
-      if (!key) break;
-      queuedWaterUpdates.delete(key);
+    const toProcess = [...queuedWaterUpdates];
+    queuedWaterUpdates.clear();
+    waterUpdates.length = 0;
+
+    const requeue = new Set<string>();
+    for (const key of toProcess) {
       const block = waterCells.get(key);
       if (block) flowWaterFrom(block);
     }
 
-    let scanned = 0;
-    for (const key of waterKeys) {
-      if (scanned >= 80) break;
-      waterKeys.delete(key);
-      waterKeys.add(key);
-      const block = waterCells.get(key);
-      if (!block) {
-        waterKeys.delete(key);
-        continue;
+    for (const key of requeue) {
+      if (!queuedWaterUpdates.has(key)) {
+        queuedWaterUpdates.add(key);
+        waterUpdates.push(key);
       }
-      flowWaterFrom(block);
-      scanned += 1;
     }
   }
 
@@ -2851,6 +2931,15 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         while (dirtyWaterChunks.size > 0) rebuildDirtyWaterChunks(64);
         updateChunkVisibility(true);
         blockMeshesReady = true;
+        for (const [key, block] of blocks) {
+          const cfg = lightConfig(block.type);
+          if (cfg) {
+            const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
+            light.position.set(block.position.x, block.position.y + 0.2, block.position.z);
+            scene.add(light);
+            blockLights.set(key, light);
+          }
+        }
         spawnCreatures();
         onProgress?.('完成', 1);
         resolve();
@@ -2977,6 +3066,18 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     rebuildAllChunks();
     while (dirtyWaterChunks.size > 0) rebuildDirtyWaterChunks(64);
 
+    for (const light of blockLights.values()) { scene.remove(light); light.dispose(); }
+    blockLights.clear();
+    for (const [key, block] of blocks) {
+      const cfg = lightConfig(block.type);
+      if (cfg) {
+        const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
+        light.position.set(block.position.x, block.position.y + 0.2, block.position.z);
+        scene.add(light);
+        blockLights.set(key, light);
+      }
+    }
+
     blockMeshesReady = true;
     emitSnapshot();
   }
@@ -3021,6 +3122,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     dispose() {
       isDisposed = true;
       renderer.setAnimationLoop(null);
+      for (const light of blockLights.values()) { scene.remove(light); light.dispose(); }
+      blockLights.clear();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('pointerup', onPointerUp);
       document.removeEventListener('mousemove', onMouseMove);

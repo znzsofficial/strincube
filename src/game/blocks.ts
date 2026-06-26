@@ -27,7 +27,7 @@ export type BlockType =
   | 'coalBlock' | 'ironBlock' | 'goldBlock' | 'diamondBlock' | 'emeraldBlock' | 'lapisBlock' | 'redstoneBlock'
   | 'calcite' | 'dripstone' | 'tuff'
   | 'brownMushroom' | 'redMushroom' | 'cactus' | 'pumpkin' | 'melon'
-  | 'hay' | 'lantern' | 'soulLantern';
+  | 'hay' | 'lantern' | 'soulLantern' | 'torch';
 
 // Texture Imports
 import acaciaLogUrl from '../../assets/minecraft/textures/block/acacia_log.png';
@@ -150,8 +150,6 @@ import melonUrl from '../../assets/minecraft/textures/block/melon_side.png';
 import melonTopUrl from '../../assets/minecraft/textures/block/melon_top.png';
 import hayUrl from '../../assets/minecraft/textures/block/hay_block_side.png';
 import hayTopUrl from '../../assets/minecraft/textures/block/hay_block_top.png';
-import lanternUrl from '../../assets/minecraft/textures/block/lantern.png';
-import soulLanternUrl from '../../assets/minecraft/textures/block/soul_lantern.png';
 import tntSideUrl from '../../assets/minecraft/textures/block/tnt_side.png';
 import tntTopUrl from '../../assets/minecraft/textures/block/tnt_top.png';
 import tntBottomUrl from '../../assets/minecraft/textures/block/tnt_bottom.png';
@@ -188,6 +186,160 @@ export function createGrassPlantTexture() {
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
   return texture;
+}
+
+export function createTorchTextures(): THREE.CanvasTexture[] {
+  const make = (w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    draw(ctx);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    return t;
+  };
+
+  const px = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, 1, 1);
+  };
+
+  const side = make(2, 10, ctx => {
+    const wood = [
+      ['#1a0e04', '#6a4020'],
+      ['#4a2a16', '#1a0e04'],
+      ['#8a5530', '#2a1608'],
+      ['#3a2010', '#7a4828'],
+      ['#1a0e04', '#5a3418'],
+      ['#6a4020', '#1a0e04'],
+      ['#2a1608', '#8a5530'],
+      ['#4a2a16', '#3a2010'],
+    ];
+    for (let row = 2; row < 10; row++) {
+      const c = wood[row - 2];
+      px(ctx, 0, row, c[0]);
+      px(ctx, 1, row, c[1]);
+    }
+    px(ctx, 0, 0, '#ff8800'); px(ctx, 1, 0, '#cc4400');
+    px(ctx, 0, 1, '#ffaa00'); px(ctx, 1, 1, '#dd5500');
+  });
+
+  const top = make(2, 2, ctx => {
+    px(ctx, 0, 0, '#ff8800'); px(ctx, 1, 0, '#cc4400');
+    px(ctx, 0, 1, '#ffaa00'); px(ctx, 1, 1, '#dd5500');
+  });
+
+  const bottom = make(2, 2, ctx => {
+    px(ctx, 0, 0, '#1a0e04'); px(ctx, 1, 0, '#5a3418');
+    px(ctx, 0, 1, '#5a3418'); px(ctx, 1, 1, '#1a0e04');
+  });
+
+  return [side, side, top, bottom, side, side];
+}
+
+export function createLanternTextures(): THREE.CanvasTexture[] {
+  const make = (w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    draw(ctx);
+    const t = new THREE.CanvasTexture(ctx.getImageData(0, 0, w, h).data.length ? c : c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    return t;
+  };
+
+  const side = make(6, 7, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 7);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 5);
+    ctx.fillStyle = '#ffcc33';
+    ctx.fillRect(1, 1, 4, 5);
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(2, 2, 2, 3);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillRect(2, 2, 2, 2);
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 3, 1, 1);
+    ctx.fillRect(5, 3, 1, 1);
+  });
+
+  const top = make(6, 6, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 6);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 4);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(2, 2, 2, 2);
+  });
+
+  const bottom = make(6, 6, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 6);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 4);
+    ctx.fillStyle = '#ffcc33';
+    ctx.fillRect(2, 2, 2, 2);
+  });
+
+  return [side, side, top, bottom, side, side];
+}
+
+export function createSoulLanternTextures(): THREE.CanvasTexture[] {
+  const make = (w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    draw(ctx);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    return t;
+  };
+
+  const side = make(6, 7, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 7);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 5);
+    ctx.fillStyle = '#33aacc';
+    ctx.fillRect(1, 1, 4, 5);
+    ctx.fillStyle = '#2288aa';
+    ctx.fillRect(2, 2, 2, 3);
+    ctx.fillStyle = '#55ccee';
+    ctx.fillRect(2, 2, 2, 2);
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 3, 1, 1);
+    ctx.fillRect(5, 3, 1, 1);
+  });
+
+  const top = make(6, 6, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 6);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 4);
+    ctx.fillStyle = '#6a6a6a';
+    ctx.fillRect(2, 2, 2, 2);
+  });
+
+  const bottom = make(6, 6, ctx => {
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillRect(0, 0, 6, 6);
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillRect(1, 1, 4, 4);
+    ctx.fillStyle = '#33aacc';
+    ctx.fillRect(2, 2, 2, 2);
+  });
+
+  return [side, side, top, bottom, side, side];
 }
 
 // Block Materials
@@ -315,8 +467,9 @@ export const blockMaterials = [
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(melonTopUrl) }), // 119
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(hayUrl) }), // 120
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(hayTopUrl) }), // 121
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(lanternUrl), emissive: 0xffaa00, emissiveIntensity: 0.3 }), // 122
-  new THREE.MeshLambertMaterial({ map: loadBlockTexture(soulLanternUrl), emissive: 0x4488aa, emissiveIntensity: 0.3 }), // 123
+  ...createLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.3 })), // 122-127
+  ...createSoulLanternTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0x4488aa, emissiveIntensity: 0.3 })), // 128-133
+  ...createTorchTextures().map((tex) => new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffaa00, emissiveIntensity: 0.4 })), // 134-139
 ];
 
 // Material Index Mapping
@@ -424,8 +577,30 @@ export function materialIndexFor(type: BlockType, normal: THREE.Vector3) {
   if (type === 'pumpkin') return Math.abs(normal.y) > 0 ? 117 : 116;
   if (type === 'melon') return Math.abs(normal.y) > 0 ? 119 : 118;
   if (type === 'hay') return Math.abs(normal.y) > 0 ? 121 : 120;
-  if (type === 'lantern') return 122;
-  if (type === 'soulLantern') return 123;
+  if (type === 'lantern') {
+    if (normal.y > 0.5) return 124;
+    if (normal.y < -0.5) return 125;
+    if (normal.x > 0.5) return 122;
+    if (normal.x < -0.5) return 123;
+    if (normal.z > 0.5) return 126;
+    return 127;
+  }
+  if (type === 'soulLantern') {
+    if (normal.y > 0.5) return 130;
+    if (normal.y < -0.5) return 131;
+    if (normal.x > 0.5) return 128;
+    if (normal.x < -0.5) return 129;
+    if (normal.z > 0.5) return 132;
+    return 133;
+  }
+  if (type === 'torch') {
+    if (normal.y > 0.5) return 136;
+    if (normal.y < -0.5) return 137;
+    if (normal.x > 0.5) return 134;
+    if (normal.x < -0.5) return 135;
+    if (normal.z > 0.5) return 138;
+    return 139;
+  }
   return 7;
 }
 
@@ -563,6 +738,7 @@ export const blockLabels: Record<BlockType, string> = {
   hay: '干草块',
   lantern: '灯笼',
   soulLantern: '灵魂灯笼',
+  torch: '火把',
 };
 
 // UI Icon URLs
@@ -673,8 +849,44 @@ export const blockIconUrls: Record<BlockType, string> = {
   pumpkin: pumpkinUrl,
   melon: melonUrl,
   hay: hayUrl,
-  lantern: lanternUrl,
-  soulLantern: soulLanternUrl,
+  torch: (() => {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const x = c.getContext('2d')!;
+    x.clearRect(0, 0, 16, 16);
+    x.fillStyle = '#2a1608'; x.fillRect(7, 5, 2, 11);
+    x.fillStyle = '#3a2010'; x.fillRect(7, 5, 1, 11);
+    x.fillStyle = '#ff8800'; x.fillRect(7, 2, 1, 3);
+    x.fillStyle = '#cc4400'; x.fillRect(8, 2, 1, 3);
+    x.fillStyle = '#ffaa00'; x.fillRect(7, 4, 1, 1);
+    x.fillStyle = '#dd5500'; x.fillRect(8, 4, 1, 1);
+    return c.toDataURL();
+  })(),
+  lantern: (() => {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const x = c.getContext('2d')!;
+    x.clearRect(0, 0, 16, 16);
+    x.fillStyle = '#5a5a5a'; x.fillRect(3, 0, 10, 16); x.fillRect(2, 1, 12, 14);
+    x.fillStyle = '#4a4a4a'; x.fillRect(3, 0, 10, 1); x.fillRect(3, 15, 10, 1); x.fillRect(2, 1, 1, 14); x.fillRect(13, 1, 1, 14);
+    x.fillStyle = '#ffcc33'; x.fillRect(4, 2, 8, 12);
+    x.fillStyle = '#ffaa00'; x.fillRect(5, 3, 6, 10);
+    x.fillStyle = '#ffe066'; x.fillRect(6, 4, 4, 8);
+    x.fillStyle = '#fff4b0'; x.fillRect(7, 5, 2, 6);
+    x.fillStyle = '#6a6a6a'; x.fillRect(6, 0, 4, 1); x.fillRect(6, 15, 4, 1); x.fillRect(2, 7, 1, 2); x.fillRect(13, 7, 1, 2);
+    return c.toDataURL();
+  })(),
+  soulLantern: (() => {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const x = c.getContext('2d')!;
+    x.clearRect(0, 0, 16, 16);
+    x.fillStyle = '#5a5a5a'; x.fillRect(3, 0, 10, 16); x.fillRect(2, 1, 12, 14);
+    x.fillStyle = '#4a4a4a'; x.fillRect(3, 0, 10, 1); x.fillRect(3, 15, 10, 1); x.fillRect(2, 1, 1, 14); x.fillRect(13, 1, 1, 14);
+    x.fillStyle = '#33aacc'; x.fillRect(4, 2, 8, 12);
+    x.fillStyle = '#2288aa'; x.fillRect(5, 3, 6, 10);
+    x.fillStyle = '#55ccee'; x.fillRect(6, 4, 4, 8);
+    x.fillStyle = '#a0eeff'; x.fillRect(7, 5, 2, 6);
+    x.fillStyle = '#6a6a6a'; x.fillRect(6, 0, 4, 1); x.fillRect(6, 15, 4, 1); x.fillRect(2, 7, 1, 2); x.fillRect(13, 7, 1, 2);
+    return c.toDataURL();
+  })(),
 };
 
 export const blockIconTints: Partial<Record<BlockType, string>> = {
@@ -688,6 +900,7 @@ export const blockIconTints: Partial<Record<BlockType, string>> = {
   mossBlock: '#5a8f29',
   shortGrass: '#74b94f',
   fern: '#4f9d4b',
+  water: '#7dbbff',
 };
 
 // Plant picking helper
