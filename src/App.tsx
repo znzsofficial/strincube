@@ -25,6 +25,7 @@ import {
   type WorldGenSettings,
   type WorldSaveData,
   defaultWorldGenSettings,
+  getWorldRadius,
 } from './game/blockGame';
 import {
   type BlockType,
@@ -181,7 +182,8 @@ export function App() {
     currentSaveIdRef.current = null;
     setShowWorldSettings(false);
     setScreen('loading');
-    setLoadingProgress({ label: '准备创建世界', progress: 0 });
+    const r = getWorldRadius(worldGenSettings);
+    setLoadingProgress({ label: `准备创建世界 · 半径 ${r} 格`, progress: 0 });
   }
 
   function saveGame() {
@@ -210,7 +212,7 @@ export function App() {
     setWorldSeed(data.seed);
     if (data.worldGen) setWorldGenSettings(data.worldGen);
     setScreen('loading');
-    setLoadingProgress({ label: '加载存档', progress: 0 });
+    setLoadingProgress({ label: '加载存档 · 读取数据', progress: 0 });
     pendingSaveRef.current = data;
   }
 
@@ -563,14 +565,36 @@ export function App() {
             <div className="world-settings">
               <h3>创建新世界</h3>
               <div className="world-settings-grid">
+                <label className="slider-label">
+                  <span>世界大小 <small>{worldGenSettings.worldSizeCustom ?? 80} 格半径</small></span>
+                  <input
+                    type="range"
+                    min={30}
+                    max={200}
+                    step={10}
+                    value={worldGenSettings.worldSizeCustom ?? 80}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const preset: WorldGenSettings['worldSize'] = v <= 50 ? 'small' : v <= 100 ? 'medium' : v <= 150 ? 'large' : 'huge';
+                      setWorldGenSettings({ ...worldGenSettings, worldSizeCustom: v, worldSize: preset });
+                    }}
+                  />
+                  <div className="slider-marks">
+                    <span>小</span><span>中</span><span>大</span><span>巨大</span>
+                  </div>
+                </label>
                 <label>
-                  <span>世界大小</span>
-                  <select value={worldGenSettings.worldSize} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, worldSize: e.target.value as WorldGenSettings['worldSize'] })}>
-                    <option value="small">小 (80格)</option>
-                    <option value="medium">中 (160格)</option>
-                    <option value="large">大 (240格)</option>
-                    <option value="huge">巨大 (400格)</option>
-                  </select>
+                  <span>世界种子</span>
+                  <input
+                    type="text"
+                    className="seed-input"
+                    placeholder="留空则随机"
+                    value={worldGenSettings.seed ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.trim();
+                      setWorldGenSettings({ ...worldGenSettings, seed: raw ? Number(raw) || undefined : undefined });
+                    }}
+                  />
                 </label>
                 <label>
                   <span>树木密度</span>
@@ -597,6 +621,15 @@ export function App() {
                     <option value="sparse">稀少</option>
                     <option value="normal">正常</option>
                     <option value="rich">丰富</option>
+                  </select>
+                </label>
+                <label>
+                  <span>植物密度</span>
+                  <select value={worldGenSettings.plantDensity ?? 'normal'} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, plantDensity: e.target.value as WorldGenSettings['plantDensity'] })}>
+                    <option value="none">无</option>
+                    <option value="sparse">稀疏</option>
+                    <option value="normal">正常</option>
+                    <option value="lush">繁茂</option>
                   </select>
                 </label>
                 <label className="toggle-row">
@@ -658,6 +691,8 @@ export function App() {
   }
 
   if (screen === 'loading') {
+    const isLoadingSave = loadingProgress.label === '加载存档' || loadingProgress.label.startsWith('加载');
+    const worldRadius = getWorldRadius(worldGenSettings);
     return (
       <main className="game-shell loading-screen">
         <div ref={mountRef} className="game-canvas" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
@@ -665,7 +700,7 @@ export function App() {
           <div className="loading-icon">
             <Loader size={36} className="loading-spinner" />
           </div>
-          <h2>{loadingProgress.label === '加载存档' ? '正在加载存档' : '正在创建世界'}</h2>
+          <h2>{isLoadingSave ? '正在加载存档' : '正在创建世界'}</h2>
           <p className="loading-label">{loadingProgress.label}</p>
           <div className="loading-bar">
             <div 
@@ -674,6 +709,7 @@ export function App() {
             />
           </div>
           <span className="loading-percent">{Math.round(loadingProgress.progress * 100)}%</span>
+          {!isLoadingSave && <p className="loading-hint">世界半径 {worldRadius} 格 · 约 {((worldRadius * 2 + 1) * (worldRadius * 2 + 1) / 1000).toFixed(0)}k 个区块</p>}
         </div>
       </main>
     );

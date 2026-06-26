@@ -20,9 +20,11 @@ export type GameSettings = {
 
 export type WorldGenSettings = {
   worldSize: 'small' | 'medium' | 'large' | 'huge';
+  worldSizeCustom?: number;
   treeDensity: 'none' | 'sparse' | 'normal' | 'dense';
   structureDensity: 'none' | 'sparse' | 'normal' | 'dense';
   oreDensity: 'none' | 'sparse' | 'normal' | 'rich';
+  plantDensity: 'none' | 'sparse' | 'normal' | 'lush';
   flatWorld: boolean;
   seed?: number;
 };
@@ -34,11 +36,17 @@ export const worldSizePresets: Record<WorldGenSettings['worldSize'], number> = {
   huge: 200,
 };
 
+export function getWorldRadius(settings: WorldGenSettings): number {
+  if (settings.worldSizeCustom != null) return settings.worldSizeCustom;
+  return worldSizePresets[settings.worldSize];
+}
+
 export const defaultWorldGenSettings: WorldGenSettings = {
   worldSize: 'medium',
   treeDensity: 'normal',
   structureDensity: 'normal',
   oreDensity: 'normal',
+  plantDensity: 'normal',
   flatWorld: false,
 };
 

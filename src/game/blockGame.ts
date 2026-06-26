@@ -27,6 +27,7 @@ import {
   type StoredModel,
   type PlacedModelEntity,
   worldSizePresets,
+  getWorldRadius,
   defaultWorldGenSettings,
 } from './types';
 import { serializeBlocks, deserializeBlocks } from './save';
@@ -69,7 +70,8 @@ import {
 import type { WorldGenContext } from './worldgen';
 import {
   seededNoise as _seededNoise,
-  terrainHeight as _terrainHeight,
+  getSurfaceHeight as _getSurfaceHeight,
+  findSafeSpawnPoint as _findSafeSpawnPoint,
   generateWorld as _generateWorld,
   spawnCreatures as _spawnCreatures,
 } from './worldgen';
@@ -98,7 +100,7 @@ export type {
   ModelImportProgress,
   ModelImportOptions,
 };
-export { worldSizePresets, defaultWorldGenSettings };
+export { worldSizePresets, getWorldRadius, defaultWorldGenSettings };
 
 type GameRenderer = {
   domElement: HTMLCanvasElement;
@@ -132,7 +134,7 @@ const chunkSize = 8;
 let worldRadius = 80;
 const waterLevel = 1;
 const maxWaterSpreadDistance = 7;
-const worldBottom = -8;
+const worldBottom = -16;
 const playerHeight = 1.7;
 
 function loadSpriteTexture(url: string) {
@@ -324,7 +326,8 @@ function rounded(v: THREE.Vector3) {
 export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot: GameSnapshot) => void, onModelMenuRequest?: () => void, options: BlockGameOptions = {}) {
   const { onProgress } = options;
   const worldGen = options.worldGen ?? defaultWorldGenSettings;
-  worldRadius = worldSizePresets[worldGen.worldSize];
+  if (worldGen.seed != null) worldSeed = worldGen.seed;
+  worldRadius = getWorldRadius(worldGen);
   
   let rendererBackend: GameSettings['rendererBackend'] = 'webgl';
   let renderer: GameRenderer;
@@ -363,9 +366,10 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   scene.background = new THREE.Color(0xbcecff);
   scene.fog = new THREE.Fog(0xbcecff, 20, settings.viewDistance);
 
+  const spawnPoint = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel);
   const camera = new THREE.PerspectiveCamera(72, mount.clientWidth / mount.clientHeight, 0.1, 180);
   camera.rotation.order = 'YXZ';
-  camera.position.set(0, _terrainHeight(worldSeed, 0, 0) + playerHeight + 2, 7);
+  camera.position.set(spawnPoint.x, _getSurfaceHeight(worldSeed, spawnPoint.x, spawnPoint.z, worldRadius, waterLevel, worldGen.flatWorld) + playerHeight + 2, spawnPoint.z);
 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
@@ -1312,7 +1316,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       const newZ = creature.home.z + Math.cos(t * 0.8) * 1.2;
       creature.root.position.x = newX;
       creature.root.position.z = newZ;
-      creature.root.position.y = _terrainHeight(worldSeed, Math.round(newX), Math.round(newZ)) + 1 + Math.sin(t * 4) * 0.04;
+      creature.root.position.y = _getSurfaceHeight(worldSeed, Math.round(newX), Math.round(newZ), worldRadius, waterLevel, worldGen.flatWorld) + 1 + Math.sin(t * 4) * 0.04;
       creature.root.rotation.y = Math.atan2(Math.cos(t), Math.sin(t * 0.8));
     }
   }
@@ -1373,7 +1377,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         entity.velocity.y += entity.velocityY;
         entity.velocityY -= 28 * delta;
         entity.anchor.add(entity.velocity.clone().multiplyScalar(delta));
-        const groundY = _terrainHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z)) + 0.5;
+        const groundY = _getSurfaceHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z), worldRadius, waterLevel, worldGen.flatWorld) + 0.5;
         if (entity.anchor.y < groundY) {
           entity.anchor.y = groundY;
           entity.velocityY = 0;
@@ -1844,6 +1848,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function load(data: WorldSaveData) {
+    onProgress?.('加载存档 · 清理旧世界', 0);
     worldSeed = data.seed;
 
     for (const [, chunkMesh] of chunkMeshes) {
@@ -1874,10 +1879,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     storedModels.clear();
     importedModelMaterials.clear();
 
+    onProgress?.('加载存档 · 读取方块数据', 0.2);
     if (data.version === 2 && data.blocksBin && data.blockDict) {
       deserializeBlocks(data, blocks, (x, y, z) => _addSolidColumnY(waterCtx, x, y, z), keyOf, THREE.Vector3);
     }
 
+    onProgress?.('加载存档 · 恢复水体', 0.4);
     for (const [key, cell] of data.waterCells) {
       const [xs, ys, zs] = key.split(',');
       const x = +xs, y = +ys, z = +zs;
@@ -1886,6 +1893,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       _markWaterChunkDirty(waterCtx, x, z);
     }
 
+    onProgress?.('加载存档 · 恢复物品与模型', 0.5);
     itemFrameContents.clear();
     itemFrameMaterialCache.clear();
     if (data.itemFrameContents) {
@@ -1912,9 +1920,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       if (data.settings.infiniteWaterSpread !== undefined) settings.infiniteWaterSpread = data.settings.infiniteWaterSpread;
     }
 
+    onProgress?.('加载存档 · 构建区块网格', 0.7);
     rebuildAllChunks();
     while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
 
+    onProgress?.('加载存档 · 放置光源', 0.9);
     for (const light of blockLights.values()) { scene.remove(light); light.dispose(); }
     blockLights.clear();
     for (const [key, block] of blocks) {
@@ -1929,15 +1939,15 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
     _spawnCreatures(worldgenCtx, worldSeed);
 
+    onProgress?.('加载存档 · 完成', 1);
     blockMeshesReady = true;
     emitSnapshot();
   }
 
   function respawn() {
-    const spawnX = 0;
-    const spawnZ = 7;
-    const spawnY = _terrainHeight(worldSeed, spawnX, spawnZ) + playerHeight + 2;
-    camera.position.set(spawnX, spawnY, spawnZ);
+    const spawn = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel);
+    const spawnY = _getSurfaceHeight(worldSeed, spawn.x, spawn.z, worldRadius, waterLevel, worldGen.flatWorld) + playerHeight + 2;
+    camera.position.set(spawn.x, spawnY, spawn.z);
     cameraYaw = 0;
     cameraPitch = 0;
     physicalY = spawnY;
