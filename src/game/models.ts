@@ -231,8 +231,8 @@ export function damagePlacedModel(ctx: ModelContext, entity: PlacedModelEntity, 
   entity.hurtCooldown = 0.22;
   entity.hurtFlash = 0.18;
   if (knockback) {
-    entity.velocity.add(knockback);
-    entity.velocityY = 6;
+    entity.velocity.copy(knockback);
+    entity.velocityY = knockback.y;
   }
   ctx.selectedPlacedModelId = entity.id;
   ctx.updateSelectedModelHelper();
@@ -313,6 +313,11 @@ export function placeStoredModel(ctx: ModelContext, modelId: string, position: T
   clone.scale.setScalar(stored.scale * ctx.modelPlacementScale);
 
   const sharedMaterials = stored.materials;
+  const storedMeshes: THREE.Mesh[] = [];
+  stored.root.traverse((child) => {
+    if (child instanceof THREE.Mesh) storedMeshes.push(child);
+  });
+  let smIdx = 0;
   clone.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       child.castShadow = ctx.settings.shadows;
@@ -326,6 +331,11 @@ export function placeStoredModel(ctx: ModelContext, modelId: string, position: T
         const found = sharedMaterials.find((sm) => sm.uuid === child.material.uuid || sm.name === child.material.name);
         if (found) child.material = found;
       }
+      const storedMesh = storedMeshes[smIdx];
+      if (storedMesh && child.geometry !== storedMesh.geometry) {
+        child.geometry = storedMesh.geometry;
+      }
+      smIdx++;
     }
   });
 

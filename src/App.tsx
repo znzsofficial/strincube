@@ -745,6 +745,17 @@ export function App() {
         }}
       />
 
+      {snapshot.contextLost && (
+        <div className="context-lost-overlay">
+          <iconify-icon icon="lucide:alert-triangle" width="48"></iconify-icon>
+          <h2>渲染上下文丢失</h2>
+          <p>显卡内存可能不足，请减少放置的模型数量后刷新页面。</p>
+          <button type="button" onClick={() => location.reload()}>
+            <iconify-icon icon="lucide:refresh-cw" width="16"></iconify-icon> 刷新页面
+          </button>
+        </div>
+      )}
+
       {showClickPrompt && !snapshot.isDead && (
         <div className="click-prompt" onClick={canvasClickToLock} onPointerDown={(e) => e.stopPropagation()}>
           <MousePointer2 size={28} aria-hidden="true" />

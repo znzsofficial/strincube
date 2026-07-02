@@ -170,6 +170,7 @@ export type GameSnapshot = {
   isLocked: boolean;
   isDead: boolean;
   fps?: number;
+  contextLost?: boolean;
   selectedModelName?: string;
   canOpenModelMenu?: boolean;
   selectedModelSettings?: PlacedModelSettings;

@@ -339,12 +339,20 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     ]);
     if (WebGPU.isAvailable()) {
       rendererBackend = 'webgpu';
-      renderer = new WebGPURenderer({ antialias: true }) as GameRenderer;
+      renderer = new WebGPURenderer({ antialias: true, powerPreference: 'high-performance' }) as GameRenderer;
     } else {
-      renderer = new THREE.WebGLRenderer({ antialias: true }) as GameRenderer;
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }) as GameRenderer;
     }
   } else {
-    renderer = new THREE.WebGLRenderer({ antialias: true }) as GameRenderer;
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }) as GameRenderer;
+  }
+
+  let _contextLost = false;
+  if (rendererBackend !== 'webgpu') {
+    renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      _contextLost = true;
+    });
   }
 
   const settings: GameSettings = {
@@ -561,6 +569,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       isLocked,
       isDead,
       fps: settings.showFps ? currentFps : undefined,
+      contextLost: _contextLost || undefined,
       selectedModelName: selectedPlacedModel?.name ?? selectedStoredModel?.name,
       canOpenModelMenu,
       selectedModelSettings: selectedPlacedModel ? {
@@ -1350,11 +1359,22 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function pushModelByWater(entity: PlacedModelEntity, delta: number) {
-    const flow = waterFlowAt(entity.root.position);
-    if (flow.lengthSq() === 0) return;
-    const move = flow.multiplyScalar(delta);
-    entity.anchor.add(move);
-    entity.root.position.add(move);
+    const pos = entity.root.position;
+    const x = Math.round(pos.x);
+    const y = Math.round(pos.y);
+    const z = Math.round(pos.z);
+    const waterCell = waterCtx.waterCells.get(keyOf(x, y, z)) ?? waterCtx.waterCells.get(keyOf(x, y - 1, z));
+    if (!waterCell) return;
+    if (entity.anchor.y + entity.offset.y > waterCell.position.y + 1) return;
+
+    const strength = waterCell.level / 7;
+    entity.velocityY += (strength * 32 + 3) * delta;
+
+    const flow = waterFlowAt(pos);
+    if (flow.lengthSq() > 0) {
+      entity.velocity.x += flow.x * strength * 5 * delta;
+      entity.velocity.z += flow.z * strength * 5 * delta;
+    }
   }
 
   function updatePlacedModels(delta: number, elapsed: number) {
@@ -1374,9 +1394,10 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       pushModelByWater(entity, delta);
 
       if (entity.velocity.lengthSq() > 0.01 || entity.velocityY !== 0) {
-        entity.velocity.y += entity.velocityY;
         entity.velocityY -= 28 * delta;
-        entity.anchor.add(entity.velocity.clone().multiplyScalar(delta));
+        entity.anchor.x += entity.velocity.x * delta;
+        entity.anchor.y += entity.velocityY * delta;
+        entity.anchor.z += entity.velocity.z * delta;
         const groundY = _getSurfaceHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z), worldRadius, waterLevel, worldGen.flatWorld) + 0.5;
         if (entity.anchor.y < groundY) {
           entity.anchor.y = groundY;
@@ -1384,29 +1405,33 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
           entity.velocity.set(0, 0, 0);
         }
         entity.root.position.copy(entity.anchor).add(entity.offset);
-        entity.velocity.multiplyScalar(Math.max(0, 1 - delta * 5));
+        entity.velocity.x *= Math.max(0, 1 - delta * 5);
+        entity.velocity.z *= Math.max(0, 1 - delta * 5);
       }
 
       if (!entity.visible || entity.animationSpeed <= 0) continue;
-      const distance = playerPosition.distanceTo(entity.root.position);
-      if (distance > entity.animationDistance) {
+      const ePos = entity.root.position;
+      const dx = ePos.x - playerPosition.x;
+      const dy = ePos.y - playerPosition.y;
+      const dz = ePos.z - playerPosition.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const animDistSq = entity.animationDistance * entity.animationDistance;
+      if (distSq > animDistSq) {
         if (entity.root.visible) entity.root.visible = false;
         continue;
       }
       if (!entity.root.visible) entity.root.visible = true;
 
-      const dx = entity.root.position.x - playerPosition.x;
-      const dz = entity.root.position.z - playerPosition.z;
-      const distSq = dx * dx + dz * dz;
-      if (distance > 18 && (dx * viewDirection.x + dz * viewDirection.z) / Math.sqrt(distSq) < -0.15) continue;
+      const horizDistSq = dx * dx + dz * dz;
+      if (distSq > 324 && (dx * viewDirection.x + dz * viewDirection.z) / Math.sqrt(horizDistSq) < -0.15) continue;
 
       entity.animationTick += delta;
-      const minInterval = distance > 42 ? 0.18 : distance > 24 ? 0.08 : 0;
+      const minInterval = distSq > 1764 ? 0.18 : distSq > 576 ? 0.08 : 0;
       if (entity.animationTick < minInterval) continue;
       const step = entity.animationTick;
       entity.animationTick = 0;
 
-      if (entity.vmdAnimation && entity.mmdRuntime?.tick && entity.vmdPlaying) {
+      if (distSq <= 900 && entity.vmdAnimation && entity.mmdRuntime?.tick && entity.vmdPlaying) {
         entity.vmdTime += step * entity.animationSpeed;
         entity.mmdRuntime.tick(entity.vmdTime, { mesh: entity.root, physics: false });
         continue;
@@ -1579,8 +1604,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       if (modelEntity) {
         selectPlacedModel(modelEntity);
         camera.getWorldDirection(_tempKnockback);
-        _tempKnockback.y = 0.2;
-        _tempKnockback.normalize().multiplyScalar(4.5);
+        _tempKnockback.y = 0.5;
+        _tempKnockback.normalize().multiplyScalar(15);
         damagePlacedModel(modelEntity, 8, _tempKnockback);
         return;
       }
