@@ -1670,7 +1670,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function lockControls() {
-    return controls.lock();
+    renderer.domElement.focus({ preventScroll: true });
+    controls.lock();
+    renderer.domElement.requestPointerLock();
   }
 
   function unlockControls() {

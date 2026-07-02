@@ -65,6 +65,29 @@ input:focus-visible {
   height: 100%;
 }
 
+.click-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: oklch(0 0 0 / 0.35);
+  cursor: pointer;
+  color: oklch(0.96 0.015 120);
+  font-size: 1.2rem;
+  user-select: none;
+}
+.click-prompt p {
+  margin: 0;
+  text-shadow: 0 2px 6px oklch(0 0 0 / 0.6);
+}
+.click-prompt:hover {
+  background: oklch(0 0 0 / 0.42);
+}
+
 .pause-menu,
 .side-panel {
   position: absolute;

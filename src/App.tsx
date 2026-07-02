@@ -6,6 +6,7 @@ import {
   Hammer,
   Loader,
   Moon,
+  MousePointer2,
   Package,
   Settings,
   Sun,
@@ -90,6 +91,8 @@ export function App() {
   const activeSlotRef = useRef(0);
   const hotbarItemsRef = useRef<InventoryItem[]>(initialHotbarItems);
   const isLockedRef = useRef(false);
+  const clickPromptRef = useRef(false);
+  const [showClickPrompt, setShowClickPrompt] = useState(false);
   const [screen, setScreen] = useState<GameScreen>('title');
   const [loadingProgress, setLoadingProgress] = useState({ label: '准备中', progress: 0 });
   const [overlay, setOverlay] = useState<Overlay>('menu');
@@ -159,6 +162,14 @@ export function App() {
     } catch {
       lockIntentRef.current = false;
       setOverlayState('menu');
+    }
+  }
+
+  function canvasClickToLock() {
+    if (isTouch) {
+      gameRef.current?.touchLock();
+    } else {
+      requestGameLock();
     }
   }
 
@@ -245,11 +256,13 @@ export function App() {
       if (nextSnapshot.isLocked) {
         if (lockIntentRef.current || overlayRef.current === null) {
           lockIntentRef.current = false;
+          clickPromptRef.current = false;
+          setShowClickPrompt(false);
           setOverlayState(null);
         } else {
           gameRef.current?.unlockControls();
         }
-      } else if (overlayRef.current === null) {
+      } else if (overlayRef.current === null && !lockIntentRef.current && !clickPromptRef.current) {
         lockIntentRef.current = false;
         setOverlayState('menu');
       }
@@ -359,9 +372,13 @@ export function App() {
         event.stopPropagation();
         if (event.repeat) return;
         if (overlayRef.current === 'menu') {
+          clickPromptRef.current = true;
+          setShowClickPrompt(true);
           setOverlayState(null);
         } else if (overlayRef.current === null) {
           lockIntentRef.current = false;
+          clickPromptRef.current = false;
+          setShowClickPrompt(false);
           setOverlayState('menu');
           gameRef.current?.unlockControls();
         }
@@ -722,15 +739,18 @@ export function App() {
         className="game-canvas"
         aria-label="可爱的方块世界游戏画面"
         onPointerDown={() => {
-          if (overlayRef.current === null && !snapshot.isLocked && !snapshot.isDead) {
-            if (isTouch) {
-              gameRef.current?.touchLock();
-            } else {
-              requestGameLock();
-            }
+          if (overlayRef.current === null && !isLockedRef.current && !snapshot.isDead) {
+            canvasClickToLock();
           }
         }}
       />
+
+      {showClickPrompt && !snapshot.isDead && (
+        <div className="click-prompt" onClick={canvasClickToLock} onPointerDown={(e) => e.stopPropagation()}>
+          <MousePointer2 size={28} aria-hidden="true" />
+          <p>点击画面继续</p>
+        </div>
+      )}
 
       {isTouch && screen === 'game' && snapshot.isLocked && !snapshot.isDead && (
         <TouchControls
@@ -748,13 +768,9 @@ export function App() {
           <Cuboid size={34} aria-hidden="true" />
           <h1>StrinCube</h1>
           <button type="button" onClick={() => {
-            lockIntentRef.current = true;
+            clickPromptRef.current = true;
+            setShowClickPrompt(true);
             setOverlayState(null);
-            if (isTouch) {
-              gameRef.current?.touchLock();
-            } else {
-              gameRef.current?.lockControls()?.catch?.(() => {});
-            }
           }}><iconify-icon icon="lucide:play" width="16"></iconify-icon> 回到游戏</button>
           <button type="button" onClick={() => openOverlayPanel('inventory')}><iconify-icon icon="lucide:package" width="16"></iconify-icon> 背包</button>
           <button type="button" onClick={() => openOverlayPanel('settings')}><iconify-icon icon="lucide:settings" width="16"></iconify-icon> 设置</button>
