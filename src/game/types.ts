@@ -6,6 +6,7 @@ import type { BlockType } from './blocks';
 export type GameSettings = {
   mouseSensitivity: number;
   moveSpeed: number;
+  gamepadLookSensitivity: number;
   daySpeed: number;
   pixelRatio: number;
   shadows: boolean;
@@ -309,6 +310,8 @@ export type BlockGameOptions = {
   rendererBackend?: GameSettings['rendererBackend'];
   worldGen?: WorldGenSettings;
   onProgress?: (label: string, progress: number) => void;
+  onHotbarStep?: (direction: -1 | 1) => void;
+  onPauseRequest?: () => void;
 };
 
 export type BlockGameApi = {

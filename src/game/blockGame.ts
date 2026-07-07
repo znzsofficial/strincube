@@ -373,6 +373,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const settings: GameSettings = {
     mouseSensitivity: 1,
     moveSpeed: 5.4,
+    gamepadLookSensitivity: 1,
     daySpeed: 0.004,
     pixelRatio: Math.min(window.devicePixelRatio, 1),
     shadows: true,
@@ -570,6 +571,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let touchMoveX = 0;
   let touchMoveY = 0;
   let touchActive = false;
+  let gamepadMoveX = 0;
+  let gamepadMoveY = 0;
+  let gamepadLookX = 0;
+  let gamepadLookY = 0;
+  let gamepadMining = false;
+  let gamepadPlaceTimer = placeInterval;
+  const gamepadButtons = new Set<number>();
   const timer = new THREE.Timer();
   const dracoLoader = new DRACOLoader().setDecoderPath(DRACO_GLTF_CONFIG);
   const gltfLoader = new GLTFLoader().setDRACOLoader(dracoLoader);
@@ -1059,6 +1067,94 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function applyCameraRotation() {
     camera.rotation.set(cameraPitch, cameraYaw, 0, 'YXZ');
+  }
+
+  function gamepadAxis(value: number, deadzone = 0.18) {
+    const abs = Math.abs(value);
+    if (abs <= deadzone) return 0;
+    return Math.sign(value) * ((abs - deadzone) / (1 - deadzone));
+  }
+
+  function gamepadPressed(gamepad: Gamepad, button: number, threshold = 0.5) {
+    return (gamepad.buttons[button]?.value ?? 0) > threshold;
+  }
+
+  function onGamepadButtonDown(button: number) {
+    if (button === 9) {
+      options.onPauseRequest?.();
+      return;
+    }
+    if (!controls.isLocked && !touchActive) return;
+
+    if (button === 0 && canJump) {
+      physicalY = Math.max(physicalY, groundHeightAt(Math.round(controls.object.position.x), Math.round(controls.object.position.z), physicalY + 0.2));
+      visualY = controls.object.position.y;
+      verticalVelocity = 6.9;
+      canJump = false;
+    }
+    if (button === 4 || button === 14) options.onHotbarStep?.(-1);
+    if (button === 5 || button === 15) options.onHotbarStep?.(1);
+    if (selectedModelId && button === 3) {
+      modelPlacementRotation = (modelPlacementRotation + Math.PI / 8) % (Math.PI * 2);
+      modelCtx.modelPlacementRotation = modelPlacementRotation;
+      emitSnapshot();
+    }
+  }
+
+  function updateGamepad(delta: number, hit: THREE.Intersection | null) {
+    const gamepad = (navigator.getGamepads?.() ?? []).find((pad) => pad?.connected) ?? null;
+    if (!gamepad) {
+      gamepadMoveX = 0;
+      gamepadMoveY = 0;
+      gamepadLookX = 0;
+      gamepadLookY = 0;
+      gamepadMining = false;
+      gamepadPlaceTimer = placeInterval;
+      gamepadButtons.clear();
+      return;
+    }
+
+    gamepadMoveX = gamepadAxis(gamepad.axes[0] ?? 0);
+    gamepadMoveY = gamepadAxis(gamepad.axes[1] ?? 0);
+    gamepadLookX = gamepadAxis(gamepad.axes[2] ?? 0, 0.14);
+    gamepadLookY = gamepadAxis(gamepad.axes[3] ?? 0, 0.14);
+    for (let button = 0; button < gamepad.buttons.length; button += 1) {
+      const pressed = gamepadPressed(gamepad, button);
+      if (pressed && !gamepadButtons.has(button)) onGamepadButtonDown(button);
+      if (pressed) gamepadButtons.add(button);
+      else gamepadButtons.delete(button);
+    }
+
+    if ((controls.isLocked || touchActive) && (gamepadLookX !== 0 || gamepadLookY !== 0)) {
+      const lookSpeed = settings.gamepadLookSensitivity * 2.65 * delta;
+      cameraYaw -= gamepadLookX * lookSpeed;
+      cameraPitch -= gamepadLookY * lookSpeed;
+      cameraPitch = THREE.MathUtils.clamp(cameraPitch, -Math.PI / 2 + 0.16, Math.PI / 2 - 0.16);
+      applyCameraRotation();
+    }
+
+    if (!controls.isLocked && !touchActive) return;
+    const mining = gamepadPressed(gamepad, 6, 0.35);
+    const placing = gamepadPressed(gamepad, 7, 0.35);
+    if (mining) {
+      if (!gamepadMining) {
+        isBreaking = true;
+        gamepadMining = true;
+      }
+      updateBreaking(delta, hit);
+    } else if (gamepadMining) {
+      gamepadMining = false;
+      resetBreaking();
+    }
+    if (placing && hit) {
+      gamepadPlaceTimer += delta;
+      if (gamepadPlaceTimer >= placeInterval) {
+        gamepadPlaceTimer = 0;
+        placeBlock(hit);
+      }
+    } else {
+      gamepadPlaceTimer = placeInterval;
+    }
   }
 
   function onMouseMove(event: MouseEvent) {
@@ -1613,8 +1709,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const speed = keys.has('shiftleft') || keys.has('shiftright') ? settings.moveSpeed * 1.58 : settings.moveSpeed;
     const kbForward = Number(keys.has('keyw')) - Number(keys.has('keys'));
     const kbRight = Number(keys.has('keyd')) - Number(keys.has('keya'));
-    const forward = kbForward || touchMoveY;
-    const right = kbRight || touchMoveX;
+    const forward = kbForward || touchMoveY || -gamepadMoveY;
+    const right = kbRight || touchMoveX || gamepadMoveX;
     _tempDirection.set(right, 0, forward);
     if (_tempDirection.lengthSq() > 0) _tempDirection.normalize();
 
@@ -1949,7 +2045,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     updateLight(delta);
     updateChunkVisibility(false, delta);
     const hit = controls.isLocked ? updateSelection(delta) : null;
-    if (controls.isLocked) updateBreaking(delta, hit);
+    updateGamepad(delta, hit);
+    if (controls.isLocked && !gamepadMining) updateBreaking(delta, hit);
 
     if (controls.isLocked && isPlacing && hit) {
       placeTimer += delta;
@@ -2103,6 +2200,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   function unlockControls() {
     keys.clear();
     touchActive = false;
+    gamepadMining = false;
+    gamepadPlaceTimer = placeInterval;
+    gamepadButtons.clear();
     controls.unlock();
   }
 
@@ -2129,6 +2229,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function onControlsUnlock() {
     keys.clear();
+    gamepadMining = false;
+    gamepadPlaceTimer = placeInterval;
+    gamepadButtons.clear();
     resetBreaking();
     emitSnapshot(false);
   }
@@ -2475,6 +2578,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     settings.timeOfDay = data.timeOfDay;
     if (data.settings) {
       if (data.settings.mouseSensitivity !== undefined) settings.mouseSensitivity = data.settings.mouseSensitivity;
+      if (data.settings.gamepadLookSensitivity !== undefined) settings.gamepadLookSensitivity = data.settings.gamepadLookSensitivity;
       if (data.settings.moveSpeed !== undefined) settings.moveSpeed = data.settings.moveSpeed;
       if (data.settings.daySpeed !== undefined) settings.daySpeed = data.settings.daySpeed;
       if (data.settings.shadows !== undefined) settings.shadows = data.settings.shadows;

@@ -120,6 +120,7 @@ export function App() {
   const [settings, setSettings] = useState<GameSettings>({
     mouseSensitivity: 1,
     moveSpeed: 5.4,
+    gamepadLookSensitivity: 1,
     daySpeed: 0.004,
     pixelRatio: Math.min(window.devicePixelRatio, 1),
     shadows: true,
@@ -293,6 +294,15 @@ export function App() {
     }, () => openOverlayPanel('model'), { 
       rendererBackend,
       worldGen: worldGenSettings,
+      onHotbarStep: (direction) => {
+        selectHotbarSlot((activeSlotRef.current + direction + hotbarItemsRef.current.length) % hotbarItemsRef.current.length);
+      },
+      onPauseRequest: () => {
+        lockIntentRef.current = false;
+        gameRef.current?.unlockControls();
+        setOverlayState('menu');
+        setSnapshot((s) => ({ ...s, isLocked: false }));
+      },
       onProgress: (label, progress) => {
         if (!cancelled) {
           setLoadingProgress({ label, progress });
@@ -997,6 +1007,7 @@ export function App() {
           <header><Settings size={18} aria-hidden="true" /> 设置</header>
           <label><Cuboid size={15} aria-hidden="true" /> 渲染后端 <select value={settings.rendererBackend} onChange={(event) => updateSetting('rendererBackend', event.target.value as GameSettings['rendererBackend'])}><option value="webgl">WebGL 稳定</option><option value="webgpu">WebGPU 实验性</option></select></label>
           <label><Gauge size={15} aria-hidden="true" /> 鼠标灵敏度 <input type="range" min="0.4" max="2.4" step="0.1" value={settings.mouseSensitivity} onChange={(event) => updateSetting('mouseSensitivity', Number(event.target.value))} /></label>
+          <label><Gauge size={15} aria-hidden="true" /> 手柄视角 <input type="range" min="0.4" max="2.6" step="0.1" value={settings.gamepadLookSensitivity} onChange={(event) => updateSetting('gamepadLookSensitivity', Number(event.target.value))} /></label>
           <label><UserRound size={15} aria-hidden="true" /> 移动速度 <input type="range" min="3" max="9" step="0.2" value={settings.moveSpeed} onChange={(event) => updateSetting('moveSpeed', Number(event.target.value))} /></label>
           <label><Hammer size={15} aria-hidden="true" /> 挖掘速度 <input type="range" min="0.5" max="5" step="0.25" value={settings.breakSpeed} onChange={(event) => updateSetting('breakSpeed', Number(event.target.value))} /></label>
           <label><Sun size={15} aria-hidden="true" /> 昼夜速度 <input type="range" min="0" max="0.012" step="0.001" value={settings.daySpeed} onChange={(event) => updateSetting('daySpeed', Number(event.target.value))} /></label>
