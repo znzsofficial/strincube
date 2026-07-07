@@ -1358,21 +1358,31 @@ function buildFallenLog(ctx: WorldGenContext, x: number, y: number, z: number, w
   for (let i = 0; i < len; i += 1) {
     const px = x + (axis ? i : 0);
     const pz = z + (axis ? 0 : i);
-    ctx.addBlock(px, y + 1, pz, logType[treeKind]);
+    addSupportedBlock(ctx, px, y + 1, pz, logType[treeKind], looseFeatureSupports);
   }
 }
+
+function addSupportedBlock(ctx: WorldGenContext, x: number, y: number, z: number, type: BlockType, supports: Set<BlockType>) {
+  if (ctx.blocks.has(`${x},${y},${z}`)) return;
+  const support = ctx.blocks.get(`${x},${y - 1},${z}`)?.type;
+  if (!support || !supports.has(support)) return;
+  ctx.addBlock(x, y, z, type);
+}
+
+const plantSupports = new Set<BlockType>(['grass', 'dirt']);
+const looseFeatureSupports = new Set<BlockType>(['grass', 'dirt', 'sand', 'snow', 'gravel']);
 
 function buildBush(ctx: WorldGenContext, x: number, y: number, z: number, worldSeed: number) {
   const leafTypes: Record<string, BlockType> = { oak: 'leaves', spruce: 'spruceLeaves', jungle: 'jungleLeaves', cherry: 'cherryLeaves' };
   const treeRoll = seededNoise(worldSeed, x + 2, y + 5, z + 2);
   const treeKind = treeRoll < 0.25 ? 'spruce' : treeRoll < 0.5 ? 'jungle' : treeRoll < 0.75 ? 'cherry' : 'oak';
   const leaf = leafTypes[treeKind];
-  ctx.addBlock(x, y + 1, z, leaf);
+  addSupportedBlock(ctx, x, y + 1, z, leaf, plantSupports);
   for (let dx = -1; dx <= 1; dx += 1) {
     for (let dz = -1; dz <= 1; dz += 1) {
       if (dx === 0 && dz === 0) continue;
       if (Math.abs(dx) + Math.abs(dz) > 1 && seededNoise(worldSeed, x + dx, y + 1, z + dz) < 0.5) continue;
-      ctx.addBlock(x + dx, y + 1, z + dz, leaf);
+      addSupportedBlock(ctx, x + dx, y + 1, z + dz, leaf, plantSupports);
     }
   }
 }
@@ -1389,7 +1399,7 @@ export function buildPumpkinPatch(ctx: WorldGenContext, x: number, y: number, z:
   for (let i = 0; i < count; i += 1) {
     const dx = Math.floor(seededNoise(worldSeed, x + i, y, z) * 3) - 1;
     const dz = Math.floor(seededNoise(worldSeed, x, y, z + i) * 3) - 1;
-    ctx.addBlock(x + dx, y + 1, z + dz, 'pumpkin');
+    addSupportedBlock(ctx, x + dx, y + 1, z + dz, 'pumpkin', looseFeatureSupports);
   }
 }
 
@@ -1399,7 +1409,7 @@ export function buildMushroomCluster(ctx: WorldGenContext, x: number, y: number,
     const dx = Math.floor(seededNoise(worldSeed, x + i, y, z) * 5) - 2;
     const dz = Math.floor(seededNoise(worldSeed, x, y, z + i) * 5) - 2;
     const type = seededNoise(worldSeed, x + i, y + 1, z + i) > 0.5 ? 'brownMushroom' : 'redMushroom';
-    ctx.addBlock(x + dx, y + 1, z + dz, type);
+    addSupportedBlock(ctx, x + dx, y + 1, z + dz, type, plantSupports);
   }
 }
 
@@ -1439,7 +1449,7 @@ export function buildSnowPile(ctx: WorldGenContext, x: number, y: number, z: num
   for (let dx = -radius; dx <= radius; dx += 1) {
     for (let dz = -radius; dz <= radius; dz += 1) {
       if (Math.abs(dx) + Math.abs(dz) > radius) continue;
-      ctx.addBlock(x + dx, y + 1, z + dz, 'snow');
+      addSupportedBlock(ctx, x + dx, y + 1, z + dz, 'snow', looseFeatureSupports);
     }
   }
 }
@@ -1466,7 +1476,7 @@ export function addVegetation(ctx: WorldGenContext, x: number, y: number, z: num
   const isRiverBank = (wx: number, wz: number) => riverProfile(worldSeed, wx, wz).bank;
   if (isRiverBed(x, z) || seededNoise(worldSeed, x, y, z) < 0.82) return;
   const plant = isRiverBank(x, z) && seededNoise(worldSeed, x, y, z + 23) > 0.72 ? 'fern' : pickPlant(x, y, z, (nx, ny, nz) => seededNoise(worldSeed, nx, ny, nz));
-  ctx.addBlock(x, y + 1, z, plant);
+  addSupportedBlock(ctx, x, y + 1, z, plant, plantSupports);
 }
 
 // ──── Creatures ────
