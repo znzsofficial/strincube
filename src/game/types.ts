@@ -16,6 +16,8 @@ export type GameSettings = {
   timeOfDay: number;
   infiniteWaterSpread: boolean;
   rendererBackend: 'webgl' | 'webgpu';
+  postProcessing: boolean;
+  bloomStrength: number;
 };
 
 export type WorldGenSettings = {

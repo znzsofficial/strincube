@@ -130,6 +130,8 @@ export function App() {
     timeOfDay: 0.28,
     infiniteWaterSpread: false,
     rendererBackend: 'webgl',
+    postProcessing: false,
+    bloomStrength: 0.18,
   });
   const [worldGenSettings, setWorldGenSettings] = useState<WorldGenSettings>(defaultWorldGenSettings);
   const [showWorldSettings, setShowWorldSettings] = useState(false);
@@ -997,8 +999,10 @@ export function App() {
           <label><Eye size={15} aria-hidden="true" /> 视距 <input type="range" min="32" max="110" step="2" value={settings.viewDistance} onChange={(event) => updateSetting('viewDistance', Number(event.target.value))} /></label>
           <label><Box size={15} aria-hidden="true" /> 渲染倍率 <input type="range" min="0.75" max="2" step="0.05" value={settings.pixelRatio} onChange={(event) => updateSetting('pixelRatio', Number(event.target.value))} /></label>
           <label><Cuboid size={15} aria-hidden="true" /> 模型亮度 <input type="range" min="0.35" max="1.25" step="0.05" value={settings.modelBrightness} onChange={(event) => updateSetting('modelBrightness', Number(event.target.value))} /></label>
+          <label><Sun size={15} aria-hidden="true" /> Bloom 强度 <input type="range" min="0" max="0.55" step="0.01" value={settings.bloomStrength} onChange={(event) => updateSetting('bloomStrength', Number(event.target.value))} /></label>
           <label className="toggle-row"><input type="checkbox" checked={settings.shadows} onChange={(event) => updateSetting('shadows', event.target.checked)} /> 阴影</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.showFps} onChange={(event) => updateSetting('showFps', event.target.checked)} /> 显示帧数</label>
+          <label className="toggle-row"><input type="checkbox" checked={settings.postProcessing} disabled={settings.rendererBackend !== 'webgl'} onChange={(event) => updateSetting('postProcessing', event.target.checked)} /> 后处理 FXAA/Bloom</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.infiniteWaterSpread} onChange={(event) => updateSetting('infiniteWaterSpread', event.target.checked)} /> 水流无限蔓延</label>
           <button type="button" className="panel-command" onClick={returnToMenu}>返回菜单</button>
         </section>
