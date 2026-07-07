@@ -42,6 +42,7 @@ const directoryInputProps = { webkitdirectory: '' } as React.InputHTMLAttributes
 type Overlay = 'menu' | 'inventory' | 'settings' | 'model' | 'file' | null;
 type GameScreen = 'title' | 'loading' | 'game';
 type InventoryItem = { type: 'block'; block: BlockType } | { type: 'model'; model: ImportedModelItem };
+type WorldMode = 'infinite' | 'finite' | 'flat';
 const initialHotbarItems: InventoryItem[] = blockItems.slice(0, 9).map((block) => ({ type: 'block', block }));
 
 const SAVE_KEY_PREFIX = 'strincube_save_';
@@ -73,6 +74,20 @@ function storeSaveData(id: string, data: WorldSaveData) {
 
 function deleteSaveData(id: string) {
   localStorage.removeItem(`${SAVE_KEY_PREFIX}${id}`);
+}
+
+function worldModeOf(settings: WorldGenSettings): WorldMode {
+  if (settings.flatWorld) return 'flat';
+  return settings.infiniteWorld ?? true ? 'infinite' : 'finite';
+}
+
+function densityLabel(value: string | undefined) {
+  if (value === 'none') return '无';
+  if (value === 'sparse') return '稀疏';
+  if (value === 'dense') return '茂密';
+  if (value === 'rich') return '丰富';
+  if (value === 'lush') return '繁茂';
+  return '正常';
 }
 
 function itemKey(item: InventoryItem) {
@@ -118,6 +133,7 @@ export function App() {
   });
   const [worldGenSettings, setWorldGenSettings] = useState<WorldGenSettings>(defaultWorldGenSettings);
   const [showWorldSettings, setShowWorldSettings] = useState(false);
+  const [showAdvancedWorldSettings, setShowAdvancedWorldSettings] = useState(false);
   const [saveMetaList, setSaveMetaList] = useState(getSaveMetaList);
   const [saveStatus, setSaveStatus] = useState('');
   const [snapshot, setSnapshot] = useState<GameSnapshot>({
@@ -194,7 +210,8 @@ export function App() {
     setShowWorldSettings(false);
     setScreen('loading');
     const r = getWorldRadius(worldGenSettings);
-    setLoadingProgress({ label: `准备创建世界 · 半径 ${r} 格`, progress: 0 });
+    const mode = worldModeOf(worldGenSettings);
+    setLoadingProgress({ label: mode === 'finite' ? `准备创建世界 · 半径 ${r} 格` : '准备创建世界 · 区块生成', progress: 0 });
   }
 
   function saveGame() {
@@ -564,6 +581,26 @@ export function App() {
   const heldItem = hotbarItems[activeSlot];
   const selectedModel = snapshot.selectedModelSettings;
   const modelHealthPercent = selectedModel ? Math.max(0, Math.min(100, (selectedModel.health / selectedModel.maxHealth) * 100)) : 0;
+  const worldMode = worldModeOf(worldGenSettings);
+  const finiteWorldRadius = worldGenSettings.worldSizeCustom ?? 80;
+  const worldSummary = worldMode === 'flat'
+    ? '超平坦测试 · 快速建造'
+    : worldMode === 'finite'
+      ? `有限世界 · 半径 ${finiteWorldRadius} 格`
+      : '无限世界 · 动态区块';
+  const densitySummary = `树木 ${densityLabel(worldGenSettings.treeDensity)} · 矿物 ${densityLabel(worldGenSettings.oreDensity)} · 植物 ${densityLabel(worldGenSettings.plantDensity)}`;
+
+  function setWorldMode(mode: WorldMode) {
+    setWorldGenSettings({
+      ...worldGenSettings,
+      flatWorld: mode === 'flat',
+      infiniteWorld: mode === 'infinite',
+    });
+  }
+
+  function updateWorldGenScale(key: 'mountainScale' | 'oceanScale' | 'riverScale' | 'biomeScale', value: number) {
+    setWorldGenSettings({ ...worldGenSettings, [key]: value });
+  }
 
   function formatUiNumber(value: number, digits = 1) {
     return Number.isInteger(value) ? String(value) : value.toFixed(digits);
@@ -580,79 +617,152 @@ export function App() {
           <p className="title-subtitle">一个可爱的方块世界</p>
           {showWorldSettings ? (
             <div className="world-settings">
-              <h3>创建新世界</h3>
+              <div className="world-settings-header">
+                <div>
+                  <h3>创建新世界</h3>
+                  <p>{worldSummary}</p>
+                </div>
+                <Cuboid size={30} aria-hidden="true" />
+              </div>
               <div className="world-settings-grid">
-                <label className="slider-label">
-                  <span>世界大小 <small>{worldGenSettings.worldSizeCustom ?? 80} 格半径</small></span>
-                  <input
-                    type="range"
-                    min={30}
-                    max={200}
-                    step={10}
-                    value={worldGenSettings.worldSizeCustom ?? 80}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      const preset: WorldGenSettings['worldSize'] = v <= 50 ? 'small' : v <= 100 ? 'medium' : v <= 150 ? 'large' : 'huge';
-                      setWorldGenSettings({ ...worldGenSettings, worldSizeCustom: v, worldSize: preset });
-                    }}
-                  />
-                  <div className="slider-marks">
-                    <span>小</span><span>中</span><span>大</span><span>巨大</span>
+                <section className="world-settings-section" aria-labelledby="world-mode-heading">
+                  <h4 id="world-mode-heading">世界模式</h4>
+                  <div className="world-mode-grid" role="radiogroup" aria-label="世界模式">
+                    <button type="button" role="radio" aria-checked={worldMode === 'infinite'} className={`world-mode-card ${worldMode === 'infinite' ? 'active' : ''}`} onClick={() => setWorldMode('infinite')}>
+                      <span className="world-mode-icon">∞</span>
+                      <strong>无限</strong>
+                      <small>边走边生成区块</small>
+                    </button>
+                    <button type="button" role="radio" aria-checked={worldMode === 'finite'} className={`world-mode-card ${worldMode === 'finite' ? 'active' : ''}`} onClick={() => setWorldMode('finite')}>
+                      <span className="world-mode-icon">□</span>
+                      <strong>有限</strong>
+                      <small>固定半径世界</small>
+                    </button>
+                    <button type="button" role="radio" aria-checked={worldMode === 'flat'} className={`world-mode-card ${worldMode === 'flat' ? 'active' : ''}`} onClick={() => setWorldMode('flat')}>
+                      <span className="world-mode-icon">▣</span>
+                      <strong>超平坦</strong>
+                      <small>测试建造最快</small>
+                    </button>
                   </div>
-                </label>
-                <label>
-                  <span>世界种子</span>
+                </section>
+
+                <section className="world-settings-section world-settings-inline" aria-labelledby="world-seed-heading">
+                  <div>
+                    <h4 id="world-seed-heading">世界种子</h4>
+                    <p>{worldGenSettings.seed == null ? '留空会随机生成' : `固定种子 ${worldGenSettings.seed}`}</p>
+                  </div>
                   <input
                     type="text"
                     className="seed-input"
-                    placeholder="留空则随机"
+                    inputMode="numeric"
+                    placeholder="随机"
                     value={worldGenSettings.seed ?? ''}
                     onChange={(e) => {
                       const raw = e.target.value.trim();
                       setWorldGenSettings({ ...worldGenSettings, seed: raw ? Number(raw) || undefined : undefined });
                     }}
                   />
-                </label>
-                <label>
-                  <span>树木密度</span>
-                  <select value={worldGenSettings.treeDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, treeDensity: e.target.value as WorldGenSettings['treeDensity'] })}>
-                    <option value="none">无</option>
-                    <option value="sparse">稀疏</option>
-                    <option value="normal">正常</option>
-                    <option value="dense">茂密</option>
-                  </select>
-                </label>
-                <label>
-                  <span>结构密度</span>
-                  <select value={worldGenSettings.structureDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, structureDensity: e.target.value as WorldGenSettings['structureDensity'] })}>
-                    <option value="none">无</option>
-                    <option value="sparse">稀疏</option>
-                    <option value="normal">正常</option>
-                    <option value="dense">丰富</option>
-                  </select>
-                </label>
-                <label>
-                  <span>矿物密度</span>
-                  <select value={worldGenSettings.oreDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, oreDensity: e.target.value as WorldGenSettings['oreDensity'] })}>
-                    <option value="none">无</option>
-                    <option value="sparse">稀少</option>
-                    <option value="normal">正常</option>
-                    <option value="rich">丰富</option>
-                  </select>
-                </label>
-                <label>
-                  <span>植物密度</span>
-                  <select value={worldGenSettings.plantDensity ?? 'normal'} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, plantDensity: e.target.value as WorldGenSettings['plantDensity'] })}>
-                    <option value="none">无</option>
-                    <option value="sparse">稀疏</option>
-                    <option value="normal">正常</option>
-                    <option value="lush">繁茂</option>
-                  </select>
-                </label>
-                <label className="toggle-row">
-                  <input type="checkbox" checked={worldGenSettings.flatWorld} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, flatWorld: e.target.checked })} />
-                  <span>超平坦世界</span>
-                </label>
+                </section>
+
+                {worldMode === 'finite' && (
+                  <section className="world-settings-section slider-label" aria-labelledby="world-size-heading">
+                    <span id="world-size-heading">世界大小 <small>{finiteWorldRadius} 格半径</small></span>
+                    <input
+                      type="range"
+                      min={30}
+                      max={200}
+                      step={10}
+                      value={finiteWorldRadius}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        const preset: WorldGenSettings['worldSize'] = v <= 50 ? 'small' : v <= 100 ? 'medium' : v <= 150 ? 'large' : 'huge';
+                        setWorldGenSettings({ ...worldGenSettings, worldSizeCustom: v, worldSize: preset });
+                      }}
+                    />
+                    <div className="slider-marks">
+                      <span>小</span><span>中</span><span>大</span><span>巨大</span>
+                    </div>
+                  </section>
+                )}
+
+                <section className="world-settings-section" aria-labelledby="world-density-heading">
+                  <div className="world-section-title">
+                    <h4 id="world-density-heading">生成内容</h4>
+                    <p>{densitySummary}</p>
+                  </div>
+                  <div className="world-density-grid">
+                    <label>
+                      <span>树木</span>
+                      <select value={worldGenSettings.treeDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, treeDensity: e.target.value as WorldGenSettings['treeDensity'] })}>
+                        <option value="none">无</option>
+                        <option value="sparse">稀疏</option>
+                        <option value="normal">正常</option>
+                        <option value="dense">茂密</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>结构</span>
+                      <select value={worldGenSettings.structureDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, structureDensity: e.target.value as WorldGenSettings['structureDensity'] })}>
+                        <option value="none">无</option>
+                        <option value="sparse">稀疏</option>
+                        <option value="normal">正常</option>
+                        <option value="dense">丰富</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>矿物</span>
+                      <select value={worldGenSettings.oreDensity} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, oreDensity: e.target.value as WorldGenSettings['oreDensity'] })}>
+                        <option value="none">无</option>
+                        <option value="sparse">稀少</option>
+                        <option value="normal">正常</option>
+                        <option value="rich">丰富</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>植物</span>
+                      <select value={worldGenSettings.plantDensity ?? 'normal'} onChange={(e) => setWorldGenSettings({ ...worldGenSettings, plantDensity: e.target.value as WorldGenSettings['plantDensity'] })}>
+                        <option value="none">无</option>
+                        <option value="sparse">稀疏</option>
+                        <option value="normal">正常</option>
+                        <option value="lush">繁茂</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section className="world-settings-section" aria-labelledby="world-advanced-heading">
+                  <button type="button" className="world-advanced-toggle" onClick={() => setShowAdvancedWorldSettings((value) => !value)} aria-expanded={showAdvancedWorldSettings} aria-controls="world-advanced-controls">
+                    <span>
+                      <strong id="world-advanced-heading">高级世界生成</strong>
+                      <small>山地、海洋、河流、群系尺度</small>
+                    </span>
+                    <iconify-icon icon={showAdvancedWorldSettings ? 'lucide:chevron-up' : 'lucide:chevron-down'} width="16"></iconify-icon>
+                  </button>
+                  {showAdvancedWorldSettings && (
+                    <div id="world-advanced-controls" className="world-advanced-controls">
+                      <label className="slider-label compact">
+                        <span>山地强度 <small>{formatUiNumber(worldGenSettings.mountainScale ?? 1, 2)}x</small></span>
+                        <input type="range" min={0.4} max={1.8} step={0.05} value={worldGenSettings.mountainScale ?? 1} onChange={(event) => updateWorldGenScale('mountainScale', Number(event.target.value))} />
+                      </label>
+                      <label className="slider-label compact">
+                        <span>海洋比例 <small>{formatUiNumber(worldGenSettings.oceanScale ?? 1, 2)}x</small></span>
+                        <input type="range" min={0.5} max={1.8} step={0.05} value={worldGenSettings.oceanScale ?? 1} onChange={(event) => updateWorldGenScale('oceanScale', Number(event.target.value))} />
+                      </label>
+                      <label className="slider-label compact">
+                        <span>河流密度 <small>{formatUiNumber(worldGenSettings.riverScale ?? 1, 2)}x</small></span>
+                        <input type="range" min={0.4} max={1.8} step={0.05} value={worldGenSettings.riverScale ?? 1} onChange={(event) => updateWorldGenScale('riverScale', Number(event.target.value))} />
+                      </label>
+                      <label className="slider-label compact">
+                        <span>群系大小 <small>{formatUiNumber(worldGenSettings.biomeScale ?? 1, 2)}x</small></span>
+                        <input type="range" min={0.5} max={2.2} step={0.05} value={worldGenSettings.biomeScale ?? 1} onChange={(event) => updateWorldGenScale('biomeScale', Number(event.target.value))} />
+                      </label>
+                    </div>
+                  )}
+                </section>
+              </div>
+              <div className="world-create-summary">
+                <span>{worldSummary}</span>
+                <span>{worldGenSettings.seed == null ? '随机种子' : `种子 ${worldGenSettings.seed}`}</span>
               </div>
               <div className="world-settings-actions">
                 <button type="button" className="start-button" onClick={confirmStartNewWorld}>
@@ -710,6 +820,7 @@ export function App() {
   if (screen === 'loading') {
     const isLoadingSave = loadingProgress.label === '加载存档' || loadingProgress.label.startsWith('加载');
     const worldRadius = getWorldRadius(worldGenSettings);
+    const loadingWorldMode = worldModeOf(worldGenSettings);
     return (
       <main className="game-shell loading-screen">
         <div ref={mountRef} className="game-canvas" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
@@ -726,7 +837,7 @@ export function App() {
             />
           </div>
           <span className="loading-percent">{Math.round(loadingProgress.progress * 100)}%</span>
-          {!isLoadingSave && <p className="loading-hint">世界半径 {worldRadius} 格 · 约 {((worldRadius * 2 + 1) * (worldRadius * 2 + 1) / 1000).toFixed(0)}k 个区块</p>}
+          {!isLoadingSave && <p className="loading-hint">{loadingWorldMode === 'finite' ? `世界半径 ${worldRadius} 格 · 约 ${((worldRadius * 2 + 1) * (worldRadius * 2 + 1) / 1000).toFixed(0)}k 个区块` : '动态区块生成 · 会优先准备出生点附近'}</p>}
         </div>
       </main>
     );
@@ -811,6 +922,16 @@ export function App() {
       {settings.showFps && snapshot.fps !== undefined && (
         <section className="hud top-left fps-hud" aria-label="帧数">
           <span>{snapshot.fps} FPS</span>
+          {snapshot.worldDebug && (
+            <>
+              <span>{snapshot.worldDebug.biome} <small>({snapshot.worldDebug.baseBiome})</small></span>
+              <span>XYZ {snapshot.worldDebug.x}, {snapshot.worldDebug.y}, {snapshot.worldDebug.z} · H {snapshot.worldDebug.height}</span>
+              <span>T {formatUiNumber(snapshot.worldDebug.temperature, 2)} H {formatUiNumber(snapshot.worldDebug.humidity, 2)} C {formatUiNumber(snapshot.worldDebug.continentalness, 2)}</span>
+              <span>E {formatUiNumber(snapshot.worldDebug.erosion, 2)} R {formatUiNumber(snapshot.worldDebug.ridge, 2)} O {snapshot.worldDebug.oceanDepth} L {snapshot.worldDebug.lakeDepth}</span>
+              {snapshot.worldDebug.riverFlow != null && <span>F {formatUiNumber(snapshot.worldDebug.riverFlow, 0)} S {formatUiNumber(snapshot.worldDebug.riverSlope ?? 0, 2)} {snapshot.worldDebug.riverSource}</span>}
+              {(snapshot.worldDebug.river || snapshot.worldDebug.riverBank || snapshot.worldDebug.lakeBank) && <span>{snapshot.worldDebug.river ? 'river' : snapshot.worldDebug.lakeBank ? 'lake bank' : 'river bank'}</span>}
+            </>
+          )}
         </section>
       )}
 
