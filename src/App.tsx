@@ -1102,7 +1102,7 @@ export function App() {
         </section>
       )}
 
-      <section className="hotbar" aria-label="快捷物品栏">
+      <section className={isTouch ? 'hotbar hotbar-touch' : 'hotbar'} aria-label="快捷物品栏">
         {hotbarItems.map((item, index) => (
           <button
             key={`${itemKey(item)}-${index}`}
@@ -1117,6 +1117,18 @@ export function App() {
             <span>{index + 1}</span>
           </button>
         ))}
+        {isTouch && (
+          <button
+            type="button"
+            className="slot inventory-open-slot"
+            aria-label="打开物品栏"
+            disabled={!snapshot.isLocked}
+            onClick={() => openOverlayPanel('inventory')}
+          >
+            <Package size={22} aria-hidden="true" />
+            <span>包</span>
+          </button>
+        )}
       </section>
 
     </main>

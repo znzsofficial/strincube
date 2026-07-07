@@ -911,6 +911,10 @@ input:focus-visible {
   box-shadow: inset 0 0 0 1px oklch(0.5 0.025 250);
 }
 
+.hotbar-touch {
+  grid-template-columns: repeat(10, 50px);
+}
+
 .held-name {
   position: absolute;
   left: 50%;
@@ -981,6 +985,19 @@ input:focus-visible {
   color: var(--menu-muted);
   font-size: 11px;
   font-weight: 900;
+}
+
+.inventory-open-slot {
+  display: grid;
+  place-items: center;
+  color: var(--menu-ink);
+  background: linear-gradient(180deg, oklch(0.36 0.08 262), oklch(0.19 0.045 262));
+  border-color: oklch(0.72 0.1 262);
+}
+
+.inventory-open-slot svg {
+  width: 24px;
+  height: 24px;
 }
 
 .item-icon {
@@ -1154,6 +1171,10 @@ input:focus-visible {
     grid-template-columns: repeat(9, 42px);
     gap: 4px;
     padding: 5px;
+  }
+
+  .hotbar-touch {
+    grid-template-columns: repeat(10, 42px);
   }
 
   .held-name {
