@@ -13,6 +13,8 @@ import {
   waterMaterial,
 } from './blocks';
 import {
+  type ChunkData,
+  type ChunkSaveData,
   type GameSettings,
   type WorldGenSettings,
   type WorldSaveData,
@@ -30,7 +32,9 @@ import {
   getWorldRadius,
   defaultWorldGenSettings,
 } from './types';
-import { serializeBlocks, deserializeBlocks } from './save';
+import { applyChunkData, deserializeBlocks, serializeChunkData } from './save';
+import { CHUNK_SIZE, chunkKey, chunkKeyFromWorld, toChunkCoord } from './chunk';
+import { createChunkManager } from './chunkManager';
 
 import type { ModelContext } from './models';
 import {
@@ -62,6 +66,7 @@ import {
   markWaterChunkDirty as _markWaterChunkDirty,
   addWaterCell as _addWaterCell,
   removeWaterCell as _removeWaterCell,
+  wakeStaticWaterAround as _wakeStaticWaterAround,
   rebuildDirtyWaterChunks as _rebuildDirtyWaterChunks,
   updateWater as _updateWater,
   columnKeyOf as _columnKeyOf,
@@ -72,7 +77,8 @@ import {
   seededNoise as _seededNoise,
   getSurfaceHeight as _getSurfaceHeight,
   findSafeSpawnPoint as _findSafeSpawnPoint,
-  generateWorld as _generateWorld,
+  generateChunk as _generateChunk,
+  getWorldDebugSample as _getWorldDebugSample,
   spawnCreatures as _spawnCreatures,
 } from './worldgen';
 import destroyStage0Url from '../../assets/minecraft/textures/block/destroy_stage_0.png';
@@ -130,11 +136,11 @@ type PrimedTnt = {
 };
 
 const uiKeyCodes = new Set(['Escape', 'KeyE', 'KeyM', 'KeyO']);
-const chunkSize = 8;
-let worldRadius = 80;
+const chunkSize = CHUNK_SIZE;
+let worldRadius: number | null = 80;
 const waterLevel = 1;
 const maxWaterSpreadDistance = 7;
-const worldBottom = -16;
+const worldBottom = -32;
 const playerHeight = 1.7;
 
 function loadSpriteTexture(url: string) {
@@ -327,7 +333,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const { onProgress } = options;
   const worldGen = options.worldGen ?? defaultWorldGenSettings;
   if (worldGen.seed != null) worldSeed = worldGen.seed;
-  worldRadius = getWorldRadius(worldGen);
+  worldRadius = worldGen.infiniteWorld ? null : getWorldRadius(worldGen);
   
   let rendererBackend: GameSettings['rendererBackend'] = 'webgl';
   let renderer: GameRenderer;
@@ -374,10 +380,10 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   scene.background = new THREE.Color(0xbcecff);
   scene.fog = new THREE.Fog(0xbcecff, 20, settings.viewDistance);
 
-  const spawnPoint = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel);
+  const spawnPoint = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel, worldGen);
   const camera = new THREE.PerspectiveCamera(72, mount.clientWidth / mount.clientHeight, 0.1, 180);
   camera.rotation.order = 'YXZ';
-  camera.position.set(spawnPoint.x, _getSurfaceHeight(worldSeed, spawnPoint.x, spawnPoint.z, worldRadius, waterLevel, worldGen.flatWorld) + playerHeight + 2, spawnPoint.z);
+  camera.position.set(spawnPoint.x, _getSurfaceHeight(worldSeed, spawnPoint.x, spawnPoint.z, worldRadius, waterLevel, worldGen.flatWorld, worldGen) + playerHeight + 2, spawnPoint.z);
 
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping;
@@ -401,7 +407,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   controls.minPolarAngle = 0.16;
   controls.maxPolarAngle = Math.PI - 0.16;
 
-  const hemiLight = new THREE.HemisphereLight(0xe9f8ff, 0xa3db78, 2.4);
+  const hemiLight = new THREE.HemisphereLight(0xe9f8ff, 0xb9c5cf, 2.4);
   scene.add(hemiLight);
 
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -448,6 +454,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const blockLights = new Map<string, THREE.PointLight>();
   const itemFrameContents = new Map<string, BlockType>();
   const itemFrameMaterialCache = new Map<string, THREE.MeshLambertMaterial>();
+  const loadedChunks = new Map<string, ChunkData>();
+  const chunkBlockKeys = new Map<string, Set<string>>();
+  const chunkWaterKeys = new Map<string, Set<string>>();
   const chunkMeshes = new Map<string, { meshes: THREE.Mesh[]; faceBlockKeysByMesh: Map<THREE.Mesh, string[]> }>();
   const creatures: { root: THREE.Group; phase: number; home: THREE.Vector3 }[] = [];
   const fallingBlocks: FallingBlockEntity[] = [];
@@ -480,6 +489,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let isDead = false;
   let isDisposed = false;
   let blockMeshesReady = false;
+  let suppressWorldRebuilds = false;
+  let suppressChunkEditRecording = false;
   let isBreaking = false;
   let breakingKey: string | null = null;
   let breakingProgress = 0;
@@ -488,6 +499,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let modelRaycastTimer = 0;
   let lastShadowUpdateX = 0;
   let lastShadowUpdateZ = 0;
+  let lastRequestedPlayerChunkKey = '';
+  const chunkManager = createChunkManager(3);
+  const initialSpawnChunkRadius = 5;
 
   let isPlacing = false;
   let placeTimer = 0;
@@ -518,7 +532,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   const _colorWhiteSun = new THREE.Color(0xffffff);
   const _colorHemiDay = new THREE.Color(0xe9f8ff);
   const _colorHemiNight = new THREE.Color(0xaec8ff);
-  const _colorHemiGroundDay = new THREE.Color(0xa3db78);
+  const _colorHemiGroundDay = new THREE.Color(0xb9c5cf);
   const _colorHemiGroundNight = new THREE.Color(0x24344d);
   const _colorHorizon = new THREE.Color(0xffb36b);
   const _colorNight = new THREE.Color(0x111a3d);
@@ -561,6 +575,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const selectedPlacedModel = modelCtx.selectedPlacedModelId ? placedModels.get(modelCtx.selectedPlacedModelId) : null;
     const selectedStoredModel = selectedModelId ? storedModels.get(selectedModelId) : null;
     const canOpenModelMenu = Boolean(selectedPlacedModel && controls.object.position.distanceTo(selectedPlacedModel.root.position) <= 6.5);
+    const debugPosition = controls.object.position;
+    const debugX = Math.round(debugPosition.x);
+    const debugY = Math.round(debugPosition.y);
+    const debugZ = Math.round(debugPosition.z);
+    const debugSample = settings.showFps ? _getWorldDebugSample(worldSeed, debugX, debugZ, waterLevel, worldGen.flatWorld, worldGen) : null;
     onSnapshot({
       selectedBlock,
       blockCount: blocks.size,
@@ -569,6 +588,27 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       isLocked,
       isDead,
       fps: settings.showFps ? currentFps : undefined,
+      worldDebug: debugSample ? {
+        x: debugX,
+        y: debugY,
+        z: debugZ,
+        height: debugSample.height,
+        biome: debugSample.biome,
+        baseBiome: debugSample.baseBiome,
+        temperature: debugSample.climate.temperature,
+        humidity: debugSample.climate.humidity,
+        continentalness: debugSample.climate.continentalness,
+        erosion: debugSample.climate.erosion,
+        ridge: debugSample.climate.ridge,
+        oceanDepth: debugSample.climate.oceanDepth,
+        lakeDepth: debugSample.climate.lakeDepth,
+        lakeBank: debugSample.climate.lakeBank,
+        river: debugSample.river.bed,
+        riverBank: debugSample.river.bank,
+        riverFlow: debugSample.river.flowAccumulation,
+        riverSlope: debugSample.river.slope,
+        riverSource: debugSample.river.source,
+      } : undefined,
       contextLost: _contextLost || undefined,
       selectedModelName: selectedPlacedModel?.name ?? selectedStoredModel?.name,
       canOpenModelMenu,
@@ -610,8 +650,249 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     return isPlantBlock(type);
   }
 
+  function getBlock(x: number, y: number, z: number) {
+    return blocks.get(keyOf(x, y, z));
+  }
+
+  function hasBlock(x: number, y: number, z: number) {
+    return blocks.has(keyOf(x, y, z));
+  }
+
+  function getWaterCell(x: number, y: number, z: number) {
+    return waterCtx.waterCells.get(keyOf(x, y, z));
+  }
+
+  function addChunkIndex(index: Map<string, Set<string>>, chunkKey: string, itemKey: string) {
+    let keys = index.get(chunkKey);
+    if (!keys) {
+      keys = new Set<string>();
+      index.set(chunkKey, keys);
+    }
+    keys.add(itemKey);
+  }
+
+  function removeChunkIndex(index: Map<string, Set<string>>, chunkKey: string, itemKey: string) {
+    const keys = index.get(chunkKey);
+    if (!keys) return;
+    keys.delete(itemKey);
+    if (keys.size === 0) index.delete(chunkKey);
+  }
+
+  function setBlockRecord(x: number, y: number, z: number, type: BlockType) {
+    const blockKey = keyOf(x, y, z);
+    blocks.set(blockKey, { position: new THREE.Vector3(x, y, z), type });
+    addChunkIndex(chunkBlockKeys, chunkKeyFromWorld(x, z), blockKey);
+    if (suppressChunkEditRecording) return;
+    const chunk = markChunkDirtyAt(x, z);
+    const existing = chunk.blockEdits.find((entry) => entry.x === x && entry.y === y && entry.z === z);
+    if (existing) existing.type = type;
+    else chunk.blockEdits.push({ x, y, z, type });
+  }
+
+  function deleteBlockRecord(x: number, y: number, z: number) {
+    const blockKey = keyOf(x, y, z);
+    blocks.delete(blockKey);
+    removeChunkIndex(chunkBlockKeys, chunkKeyFromWorld(x, z), blockKey);
+    if (suppressChunkEditRecording) return;
+    const chunk = markChunkDirtyAt(x, z);
+    const existing = chunk.blockEdits.find((entry) => entry.x === x && entry.y === y && entry.z === z);
+    if (existing) existing.type = null;
+    else chunk.blockEdits.push({ x, y, z, type: null });
+  }
+
+  function setWaterCellRecord(x: number, y: number, z: number, cell: { distance: number; level: number; source: boolean; falling?: boolean; static?: boolean }) {
+    const waterKey = keyOf(x, y, z);
+    const normalizedCell = { distance: cell.distance, level: cell.level, source: cell.source, falling: cell.falling ?? false, static: cell.static ?? false };
+    waterCtx.waterCells.set(waterKey, { position: new THREE.Vector3(x, y, z), ...normalizedCell });
+    addChunkIndex(chunkWaterKeys, chunkKeyFromWorld(x, z), waterKey);
+    if (suppressChunkEditRecording) return;
+    const chunk = markChunkDirtyAt(x, z);
+    const existing = chunk.waterEdits.find((entry) => entry.x === x && entry.y === y && entry.z === z);
+    if (existing) {
+      existing.distance = normalizedCell.distance;
+      existing.level = normalizedCell.level;
+      existing.source = normalizedCell.source;
+      existing.falling = normalizedCell.falling;
+      existing.static = normalizedCell.static;
+      existing.removed = false;
+    } else {
+      chunk.waterEdits.push({ x, y, z, distance: normalizedCell.distance, level: normalizedCell.level, source: normalizedCell.source, falling: normalizedCell.falling, static: normalizedCell.static });
+    }
+  }
+
+  function deleteWaterCellRecord(x: number, y: number, z: number) {
+    _removeWaterCell(waterCtx, x, y, z);
+  }
+
+  function clearWorldData() {
+    blocks.clear();
+    waterCtx.waterCells.clear();
+    loadedChunks.clear();
+    chunkBlockKeys.clear();
+    chunkWaterKeys.clear();
+  }
+
+  function ensureLoadedChunkMeta(chunkX: number, chunkZ: number) {
+    const key = chunkKey(chunkX, chunkZ);
+    let chunk = loadedChunks.get(key);
+    if (!chunk) {
+      chunk = {
+        chunkX,
+        chunkZ,
+        state: 'empty',
+        generatedStage: 'none',
+        dirtyMesh: false,
+        dirtyWaterMesh: false,
+        modified: false,
+        structureRefs: [],
+        blockEdits: [],
+        waterEdits: [],
+      };
+      loadedChunks.set(key, chunk);
+    }
+    chunk.lastAccessTime = Date.now();
+    return chunk;
+  }
+
+  function markChunkGenerated(chunkX: number, chunkZ: number, stage: ChunkData['generatedStage']) {
+    const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+    chunk.generatedStage = stage;
+    chunk.state = 'populated';
+    chunk.dirtyMesh = true;
+    chunk.dirtyWaterMesh = true;
+    return chunk;
+  }
+
+  function markChunkDirtyAt(x: number, z: number, modified = true) {
+    const { chunkX, chunkZ } = toChunkCoord(x, z);
+    const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+    chunk.dirtyMesh = true;
+    chunk.dirtyWaterMesh = true;
+    if (modified) chunk.modified = true;
+    if (chunk.state === 'empty') chunk.state = 'terrain';
+    if (chunk.generatedStage === 'none') chunk.generatedStage = 'terrain';
+    return chunk;
+  }
+
+  function collectModifiedChunkSaves(): ChunkSaveData[] {
+    return [...loadedChunks.values()]
+      .filter((chunk) => chunk.modified)
+      .map((chunk) => serializeChunkData({
+        version: 1,
+        chunkX: chunk.chunkX,
+        chunkZ: chunk.chunkZ,
+        generatedStage: chunk.generatedStage,
+        blockEdits: chunk.blockEdits.map((entry) => ({ ...entry })),
+        waterEdits: chunk.waterEdits.map((entry) => ({ ...entry })),
+        structureRefs: [...chunk.structureRefs],
+        modified: chunk.modified,
+      }));
+  }
+
+  function restoreChunkSaveMeta(chunkSave: ChunkSaveData) {
+    const chunk = ensureLoadedChunkMeta(chunkSave.chunkX, chunkSave.chunkZ);
+    chunk.generatedStage = chunkSave.generatedStage;
+    chunk.state = 'populated';
+    chunk.dirtyMesh = true;
+    chunk.dirtyWaterMesh = true;
+    chunk.modified = chunkSave.modified ?? (chunkSave.blockEdits.length > 0 || chunkSave.waterEdits.length > 0);
+    chunk.structureRefs = [...chunkSave.structureRefs];
+    chunk.blockEdits = chunkSave.blockEdits.map((entry) => ({ ...entry }));
+    chunk.waterEdits = chunkSave.waterEdits.map((entry) => ({ ...entry }));
+  }
+
+  function rebuildLoadedChunkMetaFromBlocks() {
+    loadedChunks.clear();
+    chunkBlockKeys.clear();
+    chunkWaterKeys.clear();
+    for (const block of blocks.values()) {
+      const { chunkX, chunkZ } = toChunkCoord(block.position.x, block.position.z);
+      addChunkIndex(chunkBlockKeys, chunkKey(chunkX, chunkZ), keyOf(block.position.x, block.position.y, block.position.z));
+      const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+      chunk.generatedStage = 'populated';
+      chunk.state = 'meshed';
+      chunk.modified = false;
+      chunk.dirtyMesh = false;
+      chunk.dirtyWaterMesh = false;
+      chunk.blockEdits.length = 0;
+      chunk.waterEdits.length = 0;
+    }
+    for (const cell of waterCtx.waterCells.values()) {
+      const { chunkX, chunkZ } = toChunkCoord(cell.position.x, cell.position.z);
+      addChunkIndex(chunkWaterKeys, chunkKey(chunkX, chunkZ), keyOf(cell.position.x, cell.position.y, cell.position.z));
+      const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+      if (chunk.generatedStage === 'none') chunk.generatedStage = 'terrain';
+      if (chunk.state === 'empty') chunk.state = 'terrain';
+      chunk.modified = false;
+      chunk.blockEdits.length = 0;
+      chunk.waterEdits.length = 0;
+    }
+  }
+
+  function rebuildChunkIndexesFromWorldData() {
+    chunkBlockKeys.clear();
+    chunkWaterKeys.clear();
+    for (const block of blocks.values()) {
+      const { chunkX, chunkZ } = toChunkCoord(block.position.x, block.position.z);
+      addChunkIndex(chunkBlockKeys, chunkKey(chunkX, chunkZ), keyOf(block.position.x, block.position.y, block.position.z));
+      const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+      if (chunk.generatedStage === 'none') chunk.generatedStage = 'populated';
+      if (chunk.state === 'empty') chunk.state = 'populated';
+    }
+    for (const cell of waterCtx.waterCells.values()) {
+      const { chunkX, chunkZ } = toChunkCoord(cell.position.x, cell.position.z);
+      addChunkIndex(chunkWaterKeys, chunkKey(chunkX, chunkZ), keyOf(cell.position.x, cell.position.y, cell.position.z));
+      const chunk = ensureLoadedChunkMeta(chunkX, chunkZ);
+      if (chunk.generatedStage === 'none') chunk.generatedStage = 'terrain';
+      if (chunk.state === 'empty') chunk.state = 'terrain';
+    }
+  }
+
+  function unloadChunk(chunk: ChunkData) {
+    if (chunk.modified) return false;
+
+    const key = chunkKey(chunk.chunkX, chunk.chunkZ);
+    removeChunkMesh(key);
+    const waterMesh = waterCtx.waterChunkMeshes.get(key);
+    if (waterMesh) {
+      scene.remove(waterMesh.mesh);
+      waterMesh.mesh.geometry.dispose();
+      waterCtx.waterChunkMeshes.delete(key);
+    }
+
+    for (const blockKey of [...(chunkBlockKeys.get(key) ?? [])]) {
+      const block = blocks.get(blockKey);
+      if (!block) continue;
+      blocks.delete(blockKey);
+      if (isSolidBlock(block.type)) _removeSolidColumnY(waterCtx, block.position.x, block.position.y, block.position.z);
+      removeBlockLight(block.position.x, block.position.y, block.position.z);
+    }
+    chunkBlockKeys.delete(key);
+
+    for (const waterKey of [...(chunkWaterKeys.get(key) ?? [])]) {
+      waterCtx.waterCells.delete(waterKey);
+      waterCtx.waterKeys.delete(waterKey);
+    }
+    chunkWaterKeys.delete(key);
+
+    loadedChunks.delete(key);
+    chunkManager.unmarkRequested(chunk.chunkX, chunk.chunkZ);
+    visibleChunkRaycastDirty = true;
+    return true;
+  }
+
+  function processChunkUnloads(maxChunks = 1) {
+    const player = controls.object.position;
+    let processed = 0;
+    for (const chunk of [...loadedChunks.values()]) {
+      if (processed >= maxChunks) break;
+      if (!chunkManager.isOutsideUnloadRadius(player.x, player.z, chunk.chunkX, chunk.chunkZ)) continue;
+      if (unloadChunk(chunk)) processed += 1;
+    }
+  }
+
   function canMoveInto(x: number, y: number, z: number) {
-    const block = blocks.get(keyOf(x, y, z));
+    const block = getBlock(x, y, z);
     return !block || isReplaceableBlock(block.type);
   }
 
@@ -619,6 +900,21 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   waterCtx.blocks = blocks;
   waterCtx.chunkMeshes = chunkMeshes;
   waterCtx.visibleChunkRaycastMeshes = visibleChunkRaycastMeshes;
+  waterCtx.onWaterCellSet = (x, y, z, cell) => setWaterCellRecord(x, y, z, cell);
+  waterCtx.onWaterCellRemove = (x, y, z) => {
+    removeChunkIndex(chunkWaterKeys, chunkKeyFromWorld(x, z), keyOf(x, y, z));
+    if (suppressChunkEditRecording) return;
+    const chunk = markChunkDirtyAt(x, z);
+    const existing = chunk.waterEdits.find((entry) => entry.x === x && entry.y === y && entry.z === z);
+    if (existing) {
+      existing.removed = true;
+      existing.distance = undefined;
+      existing.level = undefined;
+      existing.source = undefined;
+    } else {
+      chunk.waterEdits.push({ x, y, z, removed: true });
+    }
+  };
 
   function groundHeightAt(x: number, z: number, maxCameraY = Infinity) {
     const solidY = waterCtx.columnSolidY.get(_columnKeyOf(x, z));
@@ -766,6 +1062,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function rebuildChunk(chunkKey: string) {
+    const chunkMeta = loadedChunks.get(chunkKey);
+    if (chunkMeta) {
+      chunkMeta.dirtyMesh = false;
+      chunkMeta.state = 'meshed';
+      chunkMeta.lastAccessTime = Date.now();
+    }
     removeChunkMesh(chunkKey);
 
     type MeshBuild = {
@@ -782,12 +1084,14 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const leavesBuild = createBuild();
 
     function pushFace(build: MeshBuild, materialIndex: number, faceIndices: number[], key: string) {
-      if (!build.materialGroups.has(materialIndex)) build.materialGroups.set(materialIndex, []);
-      build.materialGroups.get(materialIndex)!.push({ indices: faceIndices, key });
+      const safeMaterialIndex = blockMaterials[materialIndex] ? materialIndex : 3;
+      if (!build.materialGroups.has(safeMaterialIndex)) build.materialGroups.set(safeMaterialIndex, []);
+      build.materialGroups.get(safeMaterialIndex)!.push({ indices: faceIndices, key });
     }
 
-    for (const [key, block] of blocks.entries()) {
-      if (chunkKeyOf(block.position.x, block.position.z) !== chunkKey) continue;
+    for (const key of chunkBlockKeys.get(chunkKey) ?? []) {
+      const block = blocks.get(key);
+      if (!block) continue;
 
       if (isPlantBlock(block.type)) {
         for (const face of flowerFaceDefs) {
@@ -813,7 +1117,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         const nx = block.position.x + face.normal.x;
         const ny = block.position.y + face.normal.y;
         const nz = block.position.z + face.normal.z;
-        const neighbor = blocks.get(keyOf(nx, ny, nz));
+        const neighbor = getBlock(nx, ny, nz);
         const neighborIsSmall = neighbor && (neighbor.type === 'lantern' || neighbor.type === 'soulLantern' || neighbor.type === 'torch' || neighbor.type === 'itemFrame');
         if (!isLantern && !isTorch && !isItemFrame && neighbor && !isPlantBlock(neighbor.type) && !neighborIsSmall) {
           const blockTransparent = isTransparentBlock(block.type);
@@ -855,7 +1159,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       }
     }
 
-    if (opaqueBuild.positions.length === 0 && glassBuild.positions.length === 0) return;
+    if (opaqueBuild.positions.length === 0 && glassBuild.positions.length === 0 && leavesBuild.positions.length === 0) return;
 
     const meshes: THREE.Mesh[] = [];
     const faceBlockKeysByMesh = new Map<THREE.Mesh, string[]>();
@@ -943,7 +1247,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function rebuildAllChunks() {
     const chunkKeys = new Set<string>();
-    for (const block of blocks.values()) chunkKeys.add(chunkKeyOf(block.position.x, block.position.z));
+    for (const key of chunkBlockKeys.keys()) chunkKeys.add(key);
     for (const chunkKey of chunkKeys) rebuildChunk(chunkKey);
   }
 
@@ -953,6 +1257,14 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     rebuildChunk(chunkKeyOf(x + 1, z));
     rebuildChunk(chunkKeyOf(x, z - 1));
     rebuildChunk(chunkKeyOf(x, z + 1));
+  }
+
+  function addRebuildKeysAroundBlock(keys: Set<string>, x: number, z: number) {
+    keys.add(chunkKeyOf(x, z));
+    keys.add(chunkKeyOf(x - 1, z));
+    keys.add(chunkKeyOf(x + 1, z));
+    keys.add(chunkKeyOf(x, z - 1));
+    keys.add(chunkKeyOf(x, z + 1));
   }
 
   function queueFallingNeighbors(x: number, y: number, z: number) {
@@ -990,33 +1302,36 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     blockLights.delete(key);
   }
 
-  function addBlock(x: number, y: number, z: number, type: BlockType, waterDistance = 0) {
+  function addBlock(x: number, y: number, z: number, type: BlockType, waterDistance = 0, staticWater = false) {
     if (type === 'water') {
-      _addWaterCell(waterCtx, x, y, z, waterDistance);
+      _addWaterCell(waterCtx, x, y, z, waterDistance, 7, waterDistance === 0, false, staticWater);
       return;
     }
 
-    const key = keyOf(x, y, z);
-    if (blocks.has(key)) return;
+    if (hasBlock(x, y, z)) return;
 
-    _removeWaterCell(waterCtx, x, y, z);
-    blocks.set(key, { position: new THREE.Vector3(x, y, z), type });
+    if (getWaterCell(x, y, z)) deleteWaterCellRecord(x, y, z);
+    setBlockRecord(x, y, z, type);
     if (isSolidBlock(type)) _addSolidColumnY(waterCtx, x, y, z);
     if (isFallingBlock(type)) queueFallingCheck(x, y, z);
     _queueWaterNeighbors(waterCtx, x, y, z);
-    if (blockMeshesReady) rebuildAroundBlock(x, z);
+    if (blockMeshesReady && !suppressWorldRebuilds) rebuildAroundBlock(x, z);
     addBlockLight(x, y, z, type);
   }
 
-  function removeBlockAt(x: number, y: number, z: number, rebuild = true) {
-    const key = keyOf(x, y, z);
-    const block = blocks.get(key);
-    if (!block) return null;
-    blocks.delete(key);
+  function afterBlockRemoved(x: number, y: number, z: number, block: { type: BlockType }) {
     if (isSolidBlock(block.type)) _removeSolidColumnY(waterCtx, x, y, z);
+    _wakeStaticWaterAround(waterCtx, x, y, z);
     _queueWaterNeighbors(waterCtx, x, y, z);
     queueFallingNeighbors(x, y, z);
-    if (rebuild) rebuildAroundBlock(x, z);
+  }
+
+  function removeBlockAt(x: number, y: number, z: number, rebuild = true) {
+    const block = getBlock(x, y, z);
+    if (!block) return null;
+    deleteBlockRecord(x, y, z);
+    afterBlockRemoved(x, y, z, block);
+    if (rebuild && !suppressWorldRebuilds) rebuildAroundBlock(x, z);
     removeBlockLight(x, block.position.y, z);
     return block;
   }
@@ -1059,7 +1374,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function queueFallingCheck(x: number, y: number, z: number) {
-    const block = blocks.get(keyOf(x, y, z));
+    const block = getBlock(x, y, z);
     if (!block || !isFallingBlock(block.type)) return;
     if (y <= worldBottom + 1) return;
     if (canMoveInto(x, y - 1, z)) spawnFallingBlock(x, y, z, block.type);
@@ -1071,7 +1386,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     if (!chunk) return null;
     const key = chunk.faceBlockKeysByMesh.get(hit.object as THREE.Mesh)?.[hit.faceIndex];
     if (!key) return null;
-    const block = blocks.get(key);
+    const [x, y, z] = key.split(',').map(Number);
+    const block = getBlock(x, y, z);
     return block ? { key, block } : null;
   }
 
@@ -1083,7 +1399,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function finishBreaking(key: string) {
-    const target = blocks.get(key);
+    const [xs, ys, zs] = key.split(',').map(Number);
+    const target = getBlock(xs, ys, zs);
     if (!target) return;
     const { x, y, z } = target.position;
     if (target.type === 'tnt') {
@@ -1096,7 +1413,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     
     // Check if blocks above should fall
     for (let dy = y + 1; dy <= y + 16; dy += 1) {
-      if (!blocks.has(keyOf(x, dy, z))) break;
+      if (!hasBlock(x, dy, z)) break;
       queueFallingCheck(x, dy, z);
     }
     
@@ -1325,7 +1642,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       const newZ = creature.home.z + Math.cos(t * 0.8) * 1.2;
       creature.root.position.x = newX;
       creature.root.position.z = newZ;
-      creature.root.position.y = _getSurfaceHeight(worldSeed, Math.round(newX), Math.round(newZ), worldRadius, waterLevel, worldGen.flatWorld) + 1 + Math.sin(t * 4) * 0.04;
+      creature.root.position.y = _getSurfaceHeight(worldSeed, Math.round(newX), Math.round(newZ), worldRadius, waterLevel, worldGen.flatWorld, worldGen) + 1 + Math.sin(t * 4) * 0.04;
       creature.root.rotation.y = Math.atan2(Math.cos(t), Math.sin(t * 0.8));
     }
   }
@@ -1334,13 +1651,13 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const x = Math.round(position.x);
     const y = Math.round(position.y);
     const z = Math.round(position.z);
-    const current = waterCtx.waterCells.get(keyOf(x, y, z)) ?? waterCtx.waterCells.get(keyOf(x, y - 1, z)) ?? waterCtx.waterCells.get(keyOf(x, y + 1, z));
+    const current = getWaterCell(x, y, z) ?? getWaterCell(x, y - 1, z) ?? getWaterCell(x, y + 1, z);
     if (!current) return _tempFlow.set(0, 0, 0);
 
     _tempFlow.set(0, 0, 0);
     const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     for (const [dx, dz] of directions) {
-      const neighbor = waterCtx.waterCells.get(keyOf(x + dx, current.position.y, z + dz));
+      const neighbor = getWaterCell(x + dx, current.position.y, z + dz);
       if (neighbor) {
         const levelDelta = current.level - neighbor.level;
         if (levelDelta >= 0) {
@@ -1363,7 +1680,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const x = Math.round(pos.x);
     const y = Math.round(pos.y);
     const z = Math.round(pos.z);
-    const waterCell = waterCtx.waterCells.get(keyOf(x, y, z)) ?? waterCtx.waterCells.get(keyOf(x, y - 1, z));
+    const waterCell = getWaterCell(x, y, z) ?? getWaterCell(x, y - 1, z);
     if (!waterCell) return;
     if (entity.anchor.y + entity.offset.y > waterCell.position.y + 1) return;
 
@@ -1398,7 +1715,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
         entity.anchor.x += entity.velocity.x * delta;
         entity.anchor.y += entity.velocityY * delta;
         entity.anchor.z += entity.velocity.z * delta;
-        const groundY = _getSurfaceHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z), worldRadius, waterLevel, worldGen.flatWorld) + 0.5;
+        const groundY = _getSurfaceHeight(worldSeed, Math.round(entity.anchor.x), Math.round(entity.anchor.z), worldRadius, waterLevel, worldGen.flatWorld, worldGen) + 0.5;
         if (entity.anchor.y < groundY) {
           entity.anchor.y = groundY;
           entity.velocityY = 0;
@@ -1470,7 +1787,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
           _tempVec3.set(x, y, z);
           const distance = center.distanceTo(_tempVec3);
           if (distance > radius + _seededNoise(worldSeed, x, y, z) * 0.8) continue;
-          const block = blocks.get(keyOf(x, y, z));
+          const block = getBlock(x, y, z);
           if (!block || block.type === 'bedrock') continue;
           if (block.type === 'tnt') {
             primeTnt(x, y, z, THREE.MathUtils.randFloat(0.35, 0.9));
@@ -1483,13 +1800,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
     // 直接移除方块，不触发下落检查
     for (const { x, y, z } of blocksToRemove) {
-      const key = keyOf(x, y, z);
-      const block = blocks.get(key);
+      const block = getBlock(x, y, z);
       if (!block) continue;
-      blocks.delete(key);
-      if (isSolidBlock(block.type)) _removeSolidColumnY(waterCtx, x, y, z);
-      _queueWaterNeighbors(waterCtx, x, y, z);
-      affectedChunks.add(chunkKeyOf(x, z));
+      deleteBlockRecord(x, y, z);
+      afterBlockRemoved(x, y, z, block);
+      addRebuildKeysAroundBlock(affectedChunks, x, z);
     }
 
     for (const entity of placedModels.values()) {
@@ -1528,7 +1843,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       const z = Math.round(entity.mesh.position.z);
       const targetY = Math.round(entity.mesh.position.y);
       const belowY = targetY - 1;
-      const below = blocks.get(keyOf(x, belowY, z));
+      const below = getBlock(x, belowY, z);
       const landed = belowY <= worldBottom || (below && isSolidBlock(below.type));
 
       if (!landed) continue;
@@ -1538,9 +1853,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       entity.mesh.geometry.dispose();
       fallingBlocks.splice(index, 1);
 
-      const replace = blocks.get(keyOf(x, placeY, z));
+      const replace = getBlock(x, placeY, z);
       if (replace && isReplaceableBlock(replace.type)) removeBlockAt(x, placeY, z, false);
-      if (!blocks.has(keyOf(x, placeY, z))) addBlock(x, placeY, z, entity.type);
+      if (!hasBlock(x, placeY, z)) addBlock(x, placeY, z, entity.type);
       queueFallingCheck(x, placeY + 1, z);
       rebuildAroundBlock(x, z);
       emitSnapshot();
@@ -1591,6 +1906,9 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     _rebuildDirtyWaterChunks(waterCtx);
     updateSelectedModelHelper();
     if (controls.isLocked || touchActive) updatePlayer(delta);
+    requestChunksAroundPlayer();
+    processPendingChunkGeneration(1);
+    processChunkUnloads(1);
     renderer.render(scene, camera);
   }
 
@@ -1793,6 +2111,106 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     return _noteMmdSupport();
   }
 
+  async function ensureSpawnAreaGenerated(centerX: number, centerZ: number) {
+    chunkManager.enqueueRadius(centerX, centerZ, initialSpawnChunkRadius);
+    const total = chunkManager.pendingRequests.length;
+    let completed = 0;
+
+    while (true) {
+      const request = chunkManager.takeNextRequest();
+      if (!request) break;
+      if (!chunkManager.markRequested(request.chunkX, request.chunkZ)) continue;
+      suppressWorldRebuilds = true;
+      suppressChunkEditRecording = true;
+      _generateChunk(worldgenCtx, worldGen, worldSeed, request.chunkX, request.chunkZ);
+      suppressChunkEditRecording = false;
+      suppressWorldRebuilds = false;
+      completed += 1;
+      const progress = total > 0 ? completed / total : 1;
+      const label = progress < 0.4
+        ? '生成区块 · 建立出生地附近地形'
+        : progress < 0.85
+          ? '生成区块 · 放置矿脉与结构'
+          : '生成区块 · 构建出生区块';
+      onProgress?.(label, progress * 0.9);
+      if (completed % 2 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+
+    onProgress?.('处理物理 · 计算重力与沙子下落', 0.92);
+    settleInitialFallingBlocks();
+    onProgress?.('构建网格 · 渲染区块与水面', 0.95);
+    rebuildAllChunks();
+    while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
+    updateChunkVisibility(true);
+    onProgress?.('放置光源与生物', 0.98);
+    for (const [key, block] of blocks) {
+      const cfg = lightConfig(block.type);
+      if (!cfg || blockLights.has(key)) continue;
+      const light = new THREE.PointLight(cfg.color, cfg.intensity, cfg.distance);
+      light.position.set(block.position.x, block.position.y + 0.2, block.position.z);
+      scene.add(light);
+      blockLights.set(key, light);
+    }
+    _spawnCreatures(worldgenCtx, worldSeed);
+    onProgress?.('完成 · 世界已就绪', 1);
+    lastRequestedPlayerChunkKey = chunkKeyFromWorld(centerX, centerZ);
+  }
+
+  function finalizeGeneratedChunk(chunkX: number, chunkZ: number) {
+    const chunk = markChunkGenerated(chunkX, chunkZ, 'populated');
+    const rebuildKeys = new Set<string>();
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        addRebuildKeysAroundBlock(rebuildKeys, (chunkX + dx) * chunkSize, (chunkZ + dz) * chunkSize);
+      }
+    }
+    for (const key of rebuildKeys) rebuildChunk(key);
+    while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
+    updateChunkVisibility(true);
+    chunk.modified = false;
+    chunk.dirtyWaterMesh = false;
+    chunk.blockEdits.length = 0;
+    chunk.waterEdits.length = 0;
+  }
+
+  function generateChunkForLoad(chunkX: number, chunkZ: number) {
+    if (chunkManager.markRequested(chunkX, chunkZ)) {
+      suppressWorldRebuilds = true;
+      suppressChunkEditRecording = true;
+      _generateChunk(worldgenCtx, worldGen, worldSeed, chunkX, chunkZ);
+      suppressChunkEditRecording = false;
+      suppressWorldRebuilds = false;
+    }
+    const chunk = markChunkGenerated(chunkX, chunkZ, 'populated');
+    chunk.modified = false;
+    chunk.blockEdits.length = 0;
+    chunk.waterEdits.length = 0;
+  }
+
+  function requestChunksAroundPlayer() {
+    const player = controls.object.position;
+    const playerChunkKey = chunkKeyFromWorld(player.x, player.z);
+    if (playerChunkKey === lastRequestedPlayerChunkKey) return;
+    chunkManager.enqueueRadius(player.x, player.z);
+    lastRequestedPlayerChunkKey = playerChunkKey;
+  }
+
+  function processPendingChunkGeneration(maxChunks = 1) {
+    let processed = 0;
+    while (processed < maxChunks) {
+      const request = chunkManager.takeNextRequest();
+      if (!request) return;
+      if (!chunkManager.markRequested(request.chunkX, request.chunkZ)) continue;
+      suppressWorldRebuilds = true;
+      suppressChunkEditRecording = true;
+      _generateChunk(worldgenCtx, worldGen, worldSeed, request.chunkX, request.chunkZ);
+      suppressChunkEditRecording = false;
+      suppressWorldRebuilds = false;
+      finalizeGeneratedChunk(request.chunkX, request.chunkZ);
+      processed += 1;
+    }
+  }
+
   // 异步初始化世界
   const worldgenCtx: WorldGenContext = {
     blocks, worldSeed, worldRadius, waterLevel, worldBottom, scene, creatures,
@@ -1801,7 +2219,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     dirtyWaterChunks: waterCtx.dirtyWaterChunks, updateChunkVisibility,
     lightConfig, blockLights, onProgress,
   };
-  await _generateWorld(worldgenCtx, worldGen, worldSeed);
+  await ensureSpawnAreaGenerated(spawnPoint.x, spawnPoint.z);
   blockMeshesReady = true;
 
   emitSnapshot();
@@ -1819,10 +2237,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   renderer.setAnimationLoop(animate);
 
   function save(name: string): WorldSaveData {
-    const { blocksBin, blockDict } = serializeBlocks(blocks);
-
-    const waterEntries: [string, { distance: number; level: number; source: boolean }][] = [];
-    for (const [key, cell] of waterCtx.waterCells) waterEntries.push([key, { distance: cell.distance, level: cell.level, source: cell.source }]);
+    const chunkSaves = collectModifiedChunkSaves();
 
     const placed: WorldSaveData['placedModels'] = [];
     for (const entity of placedModels.values()) {
@@ -1856,9 +2271,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       savedAt: Date.now(),
       seed: worldSeed,
       worldGen: { ...worldGen },
-      blocksBin,
-      blockDict,
-      waterCells: waterEntries,
+      saveMode: 'chunkDelta',
       player: {
         x: camera.position.x, y: camera.position.y, z: camera.position.z,
         yaw: cameraYaw, pitch: cameraPitch,
@@ -1871,12 +2284,15 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       placedModels: placed,
       importedModels: imported,
       itemFrameContents: [...itemFrameContents.entries()],
+      chunks: chunkSaves,
     };
   }
 
   function load(data: WorldSaveData) {
     onProgress?.('加载存档 · 清理旧世界', 0);
     worldSeed = data.seed;
+    chunkManager.clear();
+    lastRequestedPlayerChunkKey = '';
 
     for (const [, chunkMesh] of chunkMeshes) {
       for (const m of chunkMesh.meshes) { scene.remove(m); m.geometry.dispose(); }
@@ -1890,8 +2306,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       model.materials.forEach((m) => { importedModelMaterials.delete(m); });
     }
 
-    blocks.clear();
-    waterCtx.waterCells.clear();
+    clearWorldData();
     waterCtx.columnSolidY.clear();
     chunkMeshes.clear();
     waterCtx.waterChunkMeshes.clear();
@@ -1906,18 +2321,59 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     storedModels.clear();
     importedModelMaterials.clear();
 
+    const hasLegacySnapshot = Boolean(data.blocksBin && data.blockDict);
+
     onProgress?.('加载存档 · 读取方块数据', 0.2);
-    if (data.version === 2 && data.blocksBin && data.blockDict) {
+    if (hasLegacySnapshot) {
       deserializeBlocks(data, blocks, (x, y, z) => _addSolidColumnY(waterCtx, x, y, z), keyOf, THREE.Vector3);
+    } else {
+      for (const request of chunkManager.getChunksInRadius(data.player.x, data.player.z)) {
+        generateChunkForLoad(request.chunkX, request.chunkZ);
+      }
     }
 
     onProgress?.('加载存档 · 恢复水体', 0.4);
-    for (const [key, cell] of data.waterCells) {
+    for (const [key, cell] of data.waterCells ?? []) {
       const [xs, ys, zs] = key.split(',');
       const x = +xs, y = +ys, z = +zs;
-      waterCtx.waterCells.set(key, { position: new THREE.Vector3(x, y, z), ...cell });
+      setWaterCellRecord(x, y, z, cell);
       waterCtx.waterKeys.add(key);
       _markWaterChunkDirty(waterCtx, x, z);
+    }
+
+    if (data.chunks?.length) {
+      onProgress?.('加载存档 · 应用区块数据', 0.46);
+      for (const chunk of data.chunks) {
+        if (!hasLegacySnapshot) generateChunkForLoad(chunk.chunkX, chunk.chunkZ);
+        suppressChunkEditRecording = true;
+        applyChunkData(
+          chunk,
+          (x, y, z, type) => {
+            const existing = getBlock(x, y, z);
+            if (existing) {
+              deleteBlockRecord(x, y, z);
+              if (isSolidBlock(existing.type)) _removeSolidColumnY(waterCtx, x, y, z);
+              _wakeStaticWaterAround(waterCtx, x, y, z);
+              _queueWaterNeighbors(waterCtx, x, y, z);
+            }
+            if (type) {
+              setBlockRecord(x, y, z, type);
+              if (isSolidBlock(type)) _addSolidColumnY(waterCtx, x, y, z);
+            }
+          },
+          (x, y, z, cell) => {
+            if (cell) {
+              setWaterCellRecord(x, y, z, cell);
+              waterCtx.waterKeys.add(keyOf(x, y, z));
+            } else {
+              deleteWaterCellRecord(x, y, z);
+            }
+            _markWaterChunkDirty(waterCtx, x, z);
+          },
+        );
+        suppressChunkEditRecording = false;
+        restoreChunkSaveMeta(chunk);
+      }
     }
 
     onProgress?.('加载存档 · 恢复物品与模型', 0.5);
@@ -1948,6 +2404,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     }
 
     onProgress?.('加载存档 · 构建区块网格', 0.7);
+    if (hasLegacySnapshot) rebuildLoadedChunkMetaFromBlocks();
+    else rebuildChunkIndexesFromWorldData();
     rebuildAllChunks();
     while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
 
@@ -1972,8 +2430,8 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   }
 
   function respawn() {
-    const spawn = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel);
-    const spawnY = _getSurfaceHeight(worldSeed, spawn.x, spawn.z, worldRadius, waterLevel, worldGen.flatWorld) + playerHeight + 2;
+    const spawn = worldGen.flatWorld ? { x: 0, z: 7 } : _findSafeSpawnPoint(worldSeed, 0, 7, worldRadius, waterLevel, worldGen);
+    const spawnY = _getSurfaceHeight(worldSeed, spawn.x, spawn.z, worldRadius, waterLevel, worldGen.flatWorld, worldGen) + playerHeight + 2;
     camera.position.set(spawn.x, spawnY, spawn.z);
     cameraYaw = 0;
     cameraPitch = 0;

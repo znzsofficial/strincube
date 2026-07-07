@@ -26,7 +26,60 @@ export type WorldGenSettings = {
   oreDensity: 'none' | 'sparse' | 'normal' | 'rich';
   plantDensity: 'none' | 'sparse' | 'normal' | 'lush';
   flatWorld: boolean;
+  infiniteWorld: boolean;
+  mountainScale: number;
+  oceanScale: number;
+  riverScale: number;
+  biomeScale: number;
   seed?: number;
+};
+
+export type ChunkState = 'empty' | 'terrain' | 'populated' | 'meshed';
+
+export type GeneratedStage = 'none' | 'terrain' | 'populated';
+
+export type BlockEdit = {
+  x: number;
+  y: number;
+  z: number;
+  type: BlockType | null;
+};
+
+export type WaterEdit = {
+  x: number;
+  y: number;
+  z: number;
+  distance?: number;
+  level?: number;
+  source?: boolean;
+  falling?: boolean;
+  static?: boolean;
+  removed?: boolean;
+};
+
+export type ChunkSaveData = {
+  version: 1;
+  chunkX: number;
+  chunkZ: number;
+  generatedStage: GeneratedStage;
+  blockEdits: BlockEdit[];
+  waterEdits: WaterEdit[];
+  structureRefs: string[];
+  modified?: boolean;
+};
+
+export type ChunkData = {
+  chunkX: number;
+  chunkZ: number;
+  state: ChunkState;
+  generatedStage: GeneratedStage;
+  dirtyMesh: boolean;
+  dirtyWaterMesh: boolean;
+  modified: boolean;
+  structureRefs: string[];
+  blockEdits: BlockEdit[];
+  waterEdits: WaterEdit[];
+  lastAccessTime?: number;
 };
 
 export const worldSizePresets: Record<WorldGenSettings['worldSize'], number> = {
@@ -48,6 +101,11 @@ export const defaultWorldGenSettings: WorldGenSettings = {
   oreDensity: 'normal',
   plantDensity: 'normal',
   flatWorld: false,
+  infiniteWorld: true,
+  mountainScale: 1,
+  oceanScale: 1,
+  riverScale: 1,
+  biomeScale: 1,
 };
 
 // ──── Model types ────
@@ -170,6 +228,27 @@ export type GameSnapshot = {
   isLocked: boolean;
   isDead: boolean;
   fps?: number;
+  worldDebug?: {
+    x: number;
+    y: number;
+    z: number;
+    height: number;
+    biome: string;
+    baseBiome: string;
+    temperature: number;
+    humidity: number;
+    continentalness: number;
+    erosion: number;
+    ridge: number;
+    oceanDepth: number;
+    lakeDepth: number;
+    lakeBank: boolean;
+    river: boolean;
+    riverBank: boolean;
+    riverFlow?: number;
+    riverSlope?: number;
+    riverSource?: string;
+  };
   contextLost?: boolean;
   selectedModelName?: string;
   canOpenModelMenu?: boolean;
@@ -188,9 +267,10 @@ export type WorldSaveData = {
   savedAt: number;
   seed: number;
   worldGen: WorldGenSettings;
-  blocksBin: string;
-  blockDict: string[];
-  waterCells: [string, { distance: number; level: number; source: boolean }][];
+  saveMode?: 'legacySnapshot' | 'chunkDelta';
+  blocksBin?: string;
+  blockDict?: string[];
+  waterCells?: [string, { distance: number; level: number; source: boolean; falling?: boolean; static?: boolean }][];
   player: {
     x: number; y: number; z: number;
     yaw: number; pitch: number;
@@ -213,6 +293,7 @@ export type WorldSaveData = {
   }[];
   importedModels: { id: string; name: string; kind: 'generic' | 'mmd' }[];
   itemFrameContents: [string, string][];
+  chunks?: ChunkSaveData[];
 };
 
 // ──── Options / API ────

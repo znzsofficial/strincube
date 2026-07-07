@@ -1,6 +1,6 @@
 import * as pako from 'pako';
 import type { BlockType } from './blocks';
-import type { WorldSaveData } from './types';
+import type { ChunkSaveData, WorldSaveData } from './types';
 
 export function serializeBlocks(blocks: Map<string, { type: BlockType }>): { blocksBin: string; blockDict: string[] } {
   const typeSet = new Set<BlockType>();
@@ -43,5 +43,42 @@ export function deserializeBlocks(
     const key = keyOf(x, y, z);
     blocks.set(key, { position: new Vector3(x, y, z), type });
     addSolidColumnY(x, y, z);
+  }
+}
+
+export function serializeChunkData(chunk: ChunkSaveData): ChunkSaveData {
+  return {
+    version: 1,
+    chunkX: chunk.chunkX,
+    chunkZ: chunk.chunkZ,
+    generatedStage: chunk.generatedStage,
+    blockEdits: chunk.blockEdits.map((entry) => ({ ...entry })),
+    waterEdits: chunk.waterEdits.map((entry) => ({ ...entry })),
+    structureRefs: [...chunk.structureRefs],
+    modified: chunk.modified,
+  };
+}
+
+export function deserializeChunkData(chunk: ChunkSaveData): ChunkSaveData {
+  return serializeChunkData(chunk);
+}
+
+export function applyChunkData(
+  chunk: ChunkSaveData,
+  applyBlock: (x: number, y: number, z: number, type: BlockType | null) => void,
+  applyWater: (x: number, y: number, z: number, cell: { distance: number; level: number; source: boolean; falling: boolean; static: boolean } | null) => void,
+) {
+  const normalized = deserializeChunkData(chunk);
+  for (const blockEdit of normalized.blockEdits) {
+    applyBlock(blockEdit.x, blockEdit.y, blockEdit.z, blockEdit.type);
+  }
+  for (const waterEdit of normalized.waterEdits) {
+    applyWater(waterEdit.x, waterEdit.y, waterEdit.z, waterEdit.removed ? null : {
+      distance: waterEdit.distance ?? 0,
+      level: waterEdit.level ?? 7,
+      source: waterEdit.source ?? false,
+      falling: waterEdit.falling ?? false,
+      static: waterEdit.static ?? false,
+    });
   }
 }
