@@ -826,6 +826,10 @@ export function App() {
                   <kbd>鼠标</kbd>
                   <span><iconify-icon icon="lucide:mouse-pointer-click" width="12"></iconify-icon> 挖掘 / 放置</span>
                 </div>
+                <div className="title-controls-row">
+                  <kbd>手柄</kbd>
+                  <span><iconify-icon icon="lucide:gamepad-2" width="12"></iconify-icon> 摇杆 / LT / RT</span>
+                </div>
               </div>
             </>
           )}
@@ -906,17 +910,21 @@ export function App() {
         <section className="pause-menu" aria-label="暂停菜单">
           <Cuboid size={34} aria-hidden="true" />
           <h1>StrinCube</h1>
-          <button type="button" onClick={() => {
+          <button type="button" className="menu-primary" onClick={() => {
             clickPromptRef.current = true;
             setShowClickPrompt(true);
             setOverlayState(null);
           }}><iconify-icon icon="lucide:play" width="16"></iconify-icon> 回到游戏</button>
-          <button type="button" onClick={() => openOverlayPanel('inventory')}><iconify-icon icon="lucide:package" width="16"></iconify-icon> 背包</button>
-          <button type="button" onClick={() => openOverlayPanel('settings')}><iconify-icon icon="lucide:settings" width="16"></iconify-icon> 设置</button>
-          <button type="button" onClick={saveGame}><iconify-icon icon="lucide:save" width="16"></iconify-icon> 保存游戏</button>
+          <div className="pause-menu-grid">
+            <button type="button" onClick={() => openOverlayPanel('inventory')}><iconify-icon icon="lucide:package" width="16"></iconify-icon> 背包</button>
+            <button type="button" onClick={() => openOverlayPanel('settings')}><iconify-icon icon="lucide:settings" width="16"></iconify-icon> 设置</button>
+          </div>
+          <button type="button" className="menu-secondary" onClick={saveGame}><iconify-icon icon="lucide:save" width="16"></iconify-icon> 保存游戏</button>
           {saveStatus && <p className="save-status">{saveStatus}</p>}
-          <button type="button" onClick={() => openFilePicker(fileInputRef.current)}><iconify-icon icon="lucide:upload" width="16"></iconify-icon> 导入模型</button>
-          <button type="button" onClick={() => openFilePicker(folderInputRef.current)}><iconify-icon icon="lucide:folder-open" width="16"></iconify-icon> 导入 MMD 文件夹</button>
+          <div className="pause-menu-grid compact">
+            <button type="button" onClick={() => openFilePicker(fileInputRef.current)}><iconify-icon icon="lucide:upload" width="16"></iconify-icon> 模型</button>
+            <button type="button" onClick={() => openFilePicker(folderInputRef.current)}><iconify-icon icon="lucide:folder-open" width="16"></iconify-icon> MMD</button>
+          </div>
           <button type="button" className="back-button" onClick={returnToTitle}><iconify-icon icon="lucide:log-out" width="16"></iconify-icon> 返回主菜单</button>
           <p>Esc 菜单，E 背包，O 设置，M 导入模型，选中模型后靠近按 F</p>
         </section>
@@ -1019,7 +1027,7 @@ export function App() {
           <label className="toggle-row"><input type="checkbox" checked={settings.showFps} onChange={(event) => updateSetting('showFps', event.target.checked)} /> 显示帧数</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.postProcessing} disabled={settings.rendererBackend !== 'webgl'} onChange={(event) => updateSetting('postProcessing', event.target.checked)} /> 后处理 FXAA/Bloom</label>
           {settings.postProcessing && settings.rendererBackend === 'webgl' && (
-            <div style={{ paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '2px solid rgba(255,255,255,0.1)', margin: '4px 0 8px 6px' }}>
+            <div className="postprocess-panel">
               <label>Bloom 强度 <input type="range" min="0" max="0.55" step="0.01" value={settings.bloomStrength} onChange={(event) => updateSetting('bloomStrength', Number(event.target.value))} /></label>
               <label className="toggle-row"><input type="checkbox" checked={settings.vignette} onChange={(event) => updateSetting('vignette', event.target.checked)} /> 晕影效果 (Vignette)</label>
               {settings.vignette && (

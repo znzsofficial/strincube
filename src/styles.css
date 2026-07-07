@@ -14,6 +14,8 @@
   --menu-muted: oklch(0.78 0.018 125);
   --menu-accent: oklch(0.82 0.17 112);
   --menu-warn: oklch(0.88 0.13 85);
+  --menu-danger: oklch(0.72 0.15 28);
+  --panel-glow: 0 24px 70px oklch(0 0 0 / 0.56), inset 0 1px 0 oklch(1 0 0 / 0.08);
   --shadow-hard: 0 4px 0 oklch(0.13 0.016 250);
   --z-hud: 10;
   --z-hotbar: 60;
@@ -139,17 +141,18 @@ input:focus-visible {
   z-index: var(--z-panel);
   transform: translate(-50%, -50%);
   color: var(--menu-ink);
-  background: oklch(0.16 0.018 250);
-  border: 1px solid oklch(0.25 0.02 250);
-  border-radius: 10px;
-  box-shadow: 0 16px 48px oklch(0 0 0 / 0.5);
+  background: linear-gradient(180deg, oklch(0.19 0.02 250 / 0.98), oklch(0.125 0.017 250 / 0.98));
+  border: 1px solid oklch(0.34 0.024 250);
+  border-radius: 14px;
+  box-shadow: var(--panel-glow);
+  backdrop-filter: blur(8px);
 }
 
 .pause-menu {
-  width: min(300px, calc(100vw - 32px));
-  padding: 20px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 22px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   text-align: center;
 }
 
@@ -168,6 +171,17 @@ input:focus-visible {
   text-wrap: balance;
 }
 
+.pause-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pause-menu-grid.compact button {
+  min-height: 34px;
+  font-size: 12px;
+}
+
 .pause-menu button,
 .panel-command,
 .inventory-item,
@@ -175,9 +189,9 @@ input:focus-visible {
   color: var(--menu-ink);
   background: oklch(0.22 0.02 250);
   border: 1px solid oklch(0.3 0.02 250);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 
 .pause-menu button,
@@ -192,12 +206,29 @@ input:focus-visible {
   font-weight: 850;
 }
 
+.pause-menu .menu-primary {
+  min-height: 46px;
+  color: oklch(0.13 0.02 120);
+  background: linear-gradient(180deg, oklch(0.88 0.17 112), oklch(0.67 0.16 122));
+  border-color: oklch(0.92 0.11 112);
+  box-shadow: 0 4px 0 oklch(0.42 0.13 130), 0 10px 28px oklch(0 0 0 / 0.32);
+}
+
+.pause-menu .menu-secondary {
+  background: linear-gradient(180deg, oklch(0.26 0.025 250), oklch(0.18 0.019 250));
+  border-color: oklch(0.42 0.03 250);
+}
+
 .pause-menu button:hover,
 .panel-command:hover,
 .inventory-item:hover,
 .slot:hover:not(:disabled) {
   background: oklch(0.28 0.025 250);
   border-color: oklch(0.4 0.025 250);
+}
+
+.pause-menu .menu-primary:hover {
+  background: linear-gradient(180deg, oklch(0.92 0.16 112), oklch(0.72 0.16 122));
 }
 
 .pause-menu button:active,
@@ -435,10 +466,12 @@ input:focus-visible {
 }
 
 .side-panel {
-  width: min(400px, calc(100vw - 72px));
+  width: min(430px, calc(100vw - 72px));
   max-height: calc(100vh - 136px);
   overflow: auto;
   padding: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.38 0.026 250) transparent;
 }
 
 .mc-inventory {
@@ -456,9 +489,11 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
-  font-size: 15px;
-  font-weight: 800;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.08);
+  font-size: 16px;
+  font-weight: 900;
   letter-spacing: -0.01em;
 }
 
@@ -741,7 +776,7 @@ input:focus-visible {
 
 .settings-panel {
   display: grid;
-  gap: 10px;
+  gap: 11px;
 }
 
 .settings-panel label {
@@ -749,8 +784,27 @@ input:focus-visible {
   grid-template-columns: 18px minmax(76px, 96px) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
+  min-height: 34px;
+  padding: 5px 0;
   font-size: 13px;
   font-weight: 700;
+}
+
+.postprocess-panel {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 6px 8px;
+  padding: 10px 0 10px 14px;
+  border-left: 2px solid oklch(0.62 0.08 112 / 0.45);
+  background: linear-gradient(90deg, oklch(0.19 0.025 250 / 0.56), transparent 80%);
+}
+
+.postprocess-panel label {
+  padding: 2px 0;
+}
+
+.postprocess-panel label:not(.toggle-row) {
+  grid-template-columns: minmax(82px, 112px) minmax(0, 1fr);
 }
 
 .model-panel label {
@@ -1251,6 +1305,12 @@ input:focus-visible {
     margin-bottom: 16px;
   }
 
+  .title-controls {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 18px;
+  }
+
   .start-button {
     padding: 10px 28px;
     font-size: 14px;
@@ -1318,6 +1378,7 @@ input:focus-visible {
   position: relative;
   text-align: center;
   z-index: 1;
+  width: min(760px, calc(100vw - 28px));
   animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1328,9 +1389,10 @@ input:focus-visible {
   width: 80px;
   height: 80px;
   margin-bottom: 20px;
-  background: oklch(0.2 0.025 260);
-  border-radius: 16px;
-  border: 1px solid oklch(0.3 0.03 260);
+  background: linear-gradient(145deg, oklch(0.24 0.034 260), oklch(0.13 0.022 260));
+  border-radius: 18px;
+  border: 1px solid oklch(0.38 0.04 260);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.08), 0 20px 45px oklch(0 0 0 / 0.32);
 }
 
 .title-icon {
@@ -1384,17 +1446,22 @@ input:focus-visible {
 }
 
 .title-controls {
-  margin-top: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  width: min(420px, 100%);
+  margin: 32px auto 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .title-controls-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
+  padding: 8px;
+  background: oklch(0.16 0.018 250 / 0.68);
+  border: 1px solid oklch(1 0 0 / 0.07);
+  border-radius: 9px;
   color: oklch(0.5 0.012 250);
   font-size: 13px;
 }
@@ -1504,14 +1571,14 @@ input:focus-visible {
 
 /* World Settings */
 .world-settings {
-  background: var(--menu-bg);
-  border: 2px solid oklch(0.12 0.015 250);
-  border-radius: 8px;
-  padding: 18px;
-  width: min(640px, calc(100vw - 32px));
-  max-height: min(78vh, 680px);
+  background: linear-gradient(180deg, oklch(0.23 0.023 250), oklch(0.16 0.018 250));
+  border: 1px solid oklch(0.38 0.028 250);
+  border-radius: 16px;
+  padding: 20px;
+  width: min(700px, calc(100vw - 32px));
+  max-height: min(82vh, 720px);
   overflow-y: auto;
-  box-shadow: 0 12px 40px oklch(0 0 0 / 0.5);
+  box-shadow: var(--panel-glow);
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   scrollbar-width: thin;
   scrollbar-color: oklch(0.36 0.026 250) transparent;
@@ -1524,9 +1591,9 @@ input:focus-visible {
   gap: 16px;
   margin-bottom: 14px;
   padding: 12px;
-  background: oklch(0.18 0.018 250);
-  border: 1px solid oklch(0.28 0.02 250);
-  border-radius: 8px;
+  background: linear-gradient(135deg, oklch(0.2 0.025 250), oklch(0.13 0.018 250));
+  border: 1px solid oklch(0.34 0.026 250);
+  border-radius: 12px;
 }
 
 .world-settings-header h3 {
@@ -1558,10 +1625,11 @@ input:focus-visible {
 }
 
 .world-settings-section {
-  padding: 12px;
-  background: oklch(0.17 0.016 250);
-  border: 1px solid oklch(0.25 0.018 250);
-  border-radius: 8px;
+  padding: 13px;
+  background: oklch(0.155 0.016 250 / 0.92);
+  border: 1px solid oklch(0.3 0.022 250);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05);
 }
 
 .world-settings-section h4,
@@ -1597,7 +1665,7 @@ input:focus-visible {
   color: var(--menu-ink);
   background: oklch(0.22 0.018 250);
   border: 1px solid oklch(0.31 0.02 250);
-  border-radius: 7px;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
@@ -1608,9 +1676,9 @@ input:focus-visible {
 }
 
 .world-mode-card.active {
-  background: oklch(0.24 0.04 118);
+  background: linear-gradient(180deg, oklch(0.29 0.06 118), oklch(0.18 0.038 125));
   border-color: var(--menu-accent);
-  box-shadow: inset 0 0 0 1px oklch(0.54 0.12 112 / 0.45);
+  box-shadow: inset 0 0 0 1px oklch(0.54 0.12 112 / 0.45), 0 8px 22px oklch(0 0 0 / 0.2);
 }
 
 .world-mode-card:active {
