@@ -567,6 +567,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   let chunkVisibilityTimer = 0;
   let visibleChunkRaycastDirty = true;
   let visibleChunkRaycastMeshes: THREE.Mesh[] = [];
+  const queuedChunkRebuilds = new Set<string>();
   const keys = new Set<string>();
   let touchMoveX = 0;
   let touchMoveY = 0;
@@ -790,6 +791,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     loadedChunks.clear();
     chunkBlockKeys.clear();
     chunkWaterKeys.clear();
+    queuedChunkRebuilds.clear();
   }
 
   function ensureLoadedChunkMeta(chunkX: number, chunkZ: number) {
@@ -1181,6 +1183,7 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       mesh.geometry.dispose();
     }
     chunkMeshes.delete(chunkKey);
+    queuedChunkRebuilds.delete(chunkKey);
     visibleChunkRaycastDirty = true;
   }
 
@@ -1411,6 +1414,22 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     const chunkKeys = new Set<string>();
     for (const key of chunkBlockKeys.keys()) chunkKeys.add(key);
     for (const chunkKey of chunkKeys) rebuildChunk(chunkKey);
+    queuedChunkRebuilds.clear();
+  }
+
+  function queueChunkRebuild(chunkKey: string) {
+    if (!loadedChunks.has(chunkKey) && !chunkBlockKeys.has(chunkKey)) return;
+    queuedChunkRebuilds.add(chunkKey);
+  }
+
+  function processQueuedChunkRebuilds(maxChunks = 2) {
+    let processed = 0;
+    for (const key of queuedChunkRebuilds) {
+      queuedChunkRebuilds.delete(key);
+      rebuildChunk(key);
+      processed += 1;
+      if (processed >= maxChunks) break;
+    }
   }
 
   function rebuildAroundBlock(x: number, z: number) {
@@ -2066,11 +2085,12 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     updatePrimedTnt(delta);
     updateFallingBlocks(delta);
     _updateWater(waterCtx, delta);
-    _rebuildDirtyWaterChunks(waterCtx);
+    _rebuildDirtyWaterChunks(waterCtx, 4);
     updateSelectedModelHelper();
     if (controls.isLocked || touchActive) updatePlayer(delta);
     requestChunksAroundPlayer();
-    processPendingChunkGeneration(1);
+    processQueuedChunkRebuilds(2);
+    if (queuedChunkRebuilds.size < 8) processPendingChunkGeneration(1);
     processChunkUnloads(1);
     if (composer && settings.postProcessing) {
       composer.render();
@@ -2343,15 +2363,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
 
   function finalizeGeneratedChunk(chunkX: number, chunkZ: number) {
     const chunk = markChunkGenerated(chunkX, chunkZ, 'populated');
-    const rebuildKeys = new Set<string>();
     for (let dx = -1; dx <= 1; dx += 1) {
       for (let dz = -1; dz <= 1; dz += 1) {
-        addRebuildKeysAroundBlock(rebuildKeys, (chunkX + dx) * chunkSize, (chunkZ + dz) * chunkSize);
+        queueChunkRebuild(chunkKey(chunkX + dx, chunkZ + dz));
       }
     }
-    for (const key of rebuildKeys) rebuildChunk(key);
-    while (waterCtx.dirtyWaterChunks.size > 0) _rebuildDirtyWaterChunks(waterCtx, 64);
-    updateChunkVisibility(true);
     chunk.modified = false;
     chunk.dirtyWaterMesh = false;
     chunk.blockEdits.length = 0;
