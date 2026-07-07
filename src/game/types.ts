@@ -18,6 +18,11 @@ export type GameSettings = {
   rendererBackend: 'webgl' | 'webgpu';
   postProcessing: boolean;
   bloomStrength: number;
+  vignette: boolean;
+  vignetteDarkness: number;
+  filmGrain: boolean;
+  filmNoise: number;
+  filmScanlines: number;
 };
 
 export type WorldGenSettings = {

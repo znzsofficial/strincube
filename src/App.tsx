@@ -132,6 +132,11 @@ export function App() {
     rendererBackend: 'webgl',
     postProcessing: false,
     bloomStrength: 0.18,
+    vignette: false,
+    vignetteDarkness: 1.0,
+    filmGrain: false,
+    filmNoise: 0.15,
+    filmScanlines: 0.05,
   });
   const [worldGenSettings, setWorldGenSettings] = useState<WorldGenSettings>(defaultWorldGenSettings);
   const [showWorldSettings, setShowWorldSettings] = useState(false);
@@ -999,10 +1004,25 @@ export function App() {
           <label><Eye size={15} aria-hidden="true" /> 视距 <input type="range" min="32" max="110" step="2" value={settings.viewDistance} onChange={(event) => updateSetting('viewDistance', Number(event.target.value))} /></label>
           <label><Box size={15} aria-hidden="true" /> 渲染倍率 <input type="range" min="0.75" max="2" step="0.05" value={settings.pixelRatio} onChange={(event) => updateSetting('pixelRatio', Number(event.target.value))} /></label>
           <label><Cuboid size={15} aria-hidden="true" /> 模型亮度 <input type="range" min="0.35" max="1.25" step="0.05" value={settings.modelBrightness} onChange={(event) => updateSetting('modelBrightness', Number(event.target.value))} /></label>
-          <label><Sun size={15} aria-hidden="true" /> Bloom 强度 <input type="range" min="0" max="0.55" step="0.01" value={settings.bloomStrength} onChange={(event) => updateSetting('bloomStrength', Number(event.target.value))} /></label>
           <label className="toggle-row"><input type="checkbox" checked={settings.shadows} onChange={(event) => updateSetting('shadows', event.target.checked)} /> 阴影</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.showFps} onChange={(event) => updateSetting('showFps', event.target.checked)} /> 显示帧数</label>
           <label className="toggle-row"><input type="checkbox" checked={settings.postProcessing} disabled={settings.rendererBackend !== 'webgl'} onChange={(event) => updateSetting('postProcessing', event.target.checked)} /> 后处理 FXAA/Bloom</label>
+          {settings.postProcessing && settings.rendererBackend === 'webgl' && (
+            <div style={{ paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '2px solid rgba(255,255,255,0.1)', margin: '4px 0 8px 6px' }}>
+              <label>Bloom 强度 <input type="range" min="0" max="0.55" step="0.01" value={settings.bloomStrength} onChange={(event) => updateSetting('bloomStrength', Number(event.target.value))} /></label>
+              <label className="toggle-row"><input type="checkbox" checked={settings.vignette} onChange={(event) => updateSetting('vignette', event.target.checked)} /> 晕影效果 (Vignette)</label>
+              {settings.vignette && (
+                <label>晕影强度 <input type="range" min="0.2" max="2.2" step="0.05" value={settings.vignetteDarkness} onChange={(event) => updateSetting('vignetteDarkness', Number(event.target.value))} /></label>
+              )}
+              <label className="toggle-row"><input type="checkbox" checked={settings.filmGrain} onChange={(event) => updateSetting('filmGrain', event.target.checked)} /> 胶片噪点 (Film Grain)</label>
+              {settings.filmGrain && (
+                <>
+                  <label>噪点强度 <input type="range" min="0.05" max="0.45" step="0.01" value={settings.filmNoise} onChange={(event) => updateSetting('filmNoise', Number(event.target.value))} /></label>
+                  <label>扫描线强度 <input type="range" min="0" max="0.25" step="0.01" value={settings.filmScanlines} onChange={(event) => updateSetting('filmScanlines', Number(event.target.value))} /></label>
+                </>
+              )}
+            </div>
+          )}
           <label className="toggle-row"><input type="checkbox" checked={settings.infiniteWaterSpread} onChange={(event) => updateSetting('infiniteWaterSpread', event.target.checked)} /> 水流无限蔓延</label>
           <button type="button" className="panel-command" onClick={returnToMenu}>返回菜单</button>
         </section>

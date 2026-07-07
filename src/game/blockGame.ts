@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import Stats from 'three/addons/libs/stats.module.js';
 import { DRACOLoader, DRACO_GLTF_CONFIG } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -8,6 +7,9 @@ import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
+import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
 import {
   type BlockType,
   blockMaterials,
@@ -383,6 +385,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     rendererBackend,
     postProcessing: false,
     bloomStrength: 0.18,
+    vignette: false,
+    vignetteDarkness: 1.0,
+    filmGrain: false,
+    filmNoise: 0.15,
+    filmScanlines: 0.05,
   };
 
   const scene = new THREE.Scene();
@@ -410,25 +417,37 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
   skyDome.renderOrder = -1000;
   scene.add(skyDome);
 
-  const stats = new Stats();
-  stats.dom.style.position = 'absolute';
-  stats.dom.style.left = '10px';
-  stats.dom.style.top = '10px';
-  stats.dom.style.zIndex = '60';
-  stats.dom.style.display = 'none';
-  mount.appendChild(stats.dom);
-
   const composer = rendererBackend === 'webgl' && renderer instanceof THREE.WebGLRenderer
     ? new EffectComposer(renderer)
     : null;
   let fxaaPass: FXAAPass | null = null;
   let bloomPass: UnrealBloomPass | null = null;
+  let vignettePass: ShaderPass | null = null;
+  let filmPass: FilmPass | null = null;
   if (composer) {
     composer.addPass(new RenderPass(scene, camera));
     fxaaPass = new FXAAPass();
     composer.addPass(fxaaPass);
     bloomPass = new UnrealBloomPass(new THREE.Vector2(mount.clientWidth, mount.clientHeight), settings.bloomStrength, 0.18, 0.82);
     composer.addPass(bloomPass);
+    
+    // Vignette
+    vignettePass = new ShaderPass(VignetteShader);
+    vignettePass.uniforms.darkness.value = settings.vignetteDarkness;
+    vignettePass.uniforms.offset.value = 1.0;
+    composer.addPass(vignettePass);
+
+    // Film
+    filmPass = new FilmPass(settings.filmNoise, false);
+    // Scanlines are handled by FilmShader, but let's see. In r185, FilmPass constructor has (intensity, grayscale)
+    // intensity is grain intensity, which maps to uniforms.intensity
+    // If we want scanlines, let's configure the uniforms dynamically
+    (filmPass as any).uniforms.intensity.value = settings.filmNoise;
+    if ((filmPass as any).uniforms.sIntensity) {
+      (filmPass as any).uniforms.sIntensity.value = settings.filmScanlines;
+    }
+    composer.addPass(filmPass);
+
     composer.addPass(new OutputPass());
     updatePostProcessingSize(mount.clientWidth, mount.clientHeight);
   }
@@ -989,8 +1008,18 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     renderer.setPixelRatio(settings.pixelRatio);
     composer?.setPixelRatio(settings.pixelRatio);
     if (bloomPass) bloomPass.strength = settings.bloomStrength;
+    if (vignettePass) {
+      vignettePass.enabled = settings.vignette;
+      vignettePass.uniforms.darkness.value = settings.vignetteDarkness;
+    }
+    if (filmPass) {
+      filmPass.enabled = settings.filmGrain;
+      (filmPass as any).uniforms.intensity.value = settings.filmNoise;
+      if ((filmPass as any).uniforms.sIntensity) {
+        (filmPass as any).uniforms.sIntensity.value = settings.filmScanlines;
+      }
+    }
     updatePostProcessingSize(mount.clientWidth, mount.clientHeight);
-    stats.dom.style.display = settings.showFps ? 'block' : 'none';
     if (nextSettings.timeOfDay !== undefined) {
       timeOfDay = nextSettings.timeOfDay;
     }
@@ -1951,7 +1980,6 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
     } else {
       renderer.render(scene, camera);
     }
-    if (settings.showFps) stats.update();
   }
 
   function onPointerDown(event: PointerEvent) {
@@ -2457,6 +2485,11 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       if (data.settings.infiniteWaterSpread !== undefined) settings.infiniteWaterSpread = data.settings.infiniteWaterSpread;
       if (data.settings.postProcessing !== undefined) settings.postProcessing = data.settings.postProcessing;
       if (data.settings.bloomStrength !== undefined) settings.bloomStrength = data.settings.bloomStrength;
+      if (data.settings.vignette !== undefined) settings.vignette = data.settings.vignette;
+      if (data.settings.vignetteDarkness !== undefined) settings.vignetteDarkness = data.settings.vignetteDarkness;
+      if (data.settings.filmGrain !== undefined) settings.filmGrain = data.settings.filmGrain;
+      if (data.settings.filmNoise !== undefined) settings.filmNoise = data.settings.filmNoise;
+      if (data.settings.filmScanlines !== undefined) settings.filmScanlines = data.settings.filmScanlines;
     }
 
     onProgress?.('加载存档 · 构建区块网格', 0.7);
@@ -2624,7 +2657,6 @@ export async function createBlockGame(mount: HTMLElement, onSnapshot: (snapshot:
       skyDome.geometry.dispose();
       skyMaterial.dispose();
       outlineMaterial.dispose();
-      stats.dom.remove();
       dracoLoader.dispose();
       composer?.dispose();
       renderer.dispose();
