@@ -2,15 +2,17 @@ import { Box, Cuboid, Eye, Gauge, Hammer, Moon, Settings, Sun, UserRound } from 
 import type { GameSettings } from '../game/blockGame';
 
 interface SettingsPanelProps {
+  isMobile?: boolean;
   settings: GameSettings;
   onReturnToMenu: () => void;
   onUpdateSetting: <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => void;
 }
 
-export function SettingsPanel({ settings, onReturnToMenu, onUpdateSetting }: SettingsPanelProps) {
+export function SettingsPanel({ isMobile = false, settings, onReturnToMenu, onUpdateSetting }: SettingsPanelProps) {
   return (
-    <section className="side-panel settings-panel" aria-label="设置">
+    <section className={isMobile ? 'mobile-settings-panel settings-panel' : 'side-panel settings-panel'} aria-label="设置">
       <header><Settings size={18} aria-hidden="true" /> 设置</header>
+      <div className="settings-panel-scroll">
       <label><Cuboid size={15} aria-hidden="true" /> 渲染后端 <select value={settings.rendererBackend} onChange={(event) => onUpdateSetting('rendererBackend', event.target.value as GameSettings['rendererBackend'])}><option value="webgl">WebGL 稳定</option><option value="webgpu">WebGPU 实验性</option></select></label>
       <label><Gauge size={15} aria-hidden="true" /> 鼠标灵敏度 <input type="range" min="0.4" max="2.4" step="0.1" value={settings.mouseSensitivity} onChange={(event) => onUpdateSetting('mouseSensitivity', Number(event.target.value))} /></label>
       <label><Gauge size={15} aria-hidden="true" /> 手柄视角 <input type="range" min="0.4" max="2.6" step="0.1" value={settings.gamepadLookSensitivity} onChange={(event) => onUpdateSetting('gamepadLookSensitivity', Number(event.target.value))} /></label>
@@ -41,7 +43,8 @@ export function SettingsPanel({ settings, onReturnToMenu, onUpdateSetting }: Set
         </div>
       )}
       <label className="toggle-row"><input type="checkbox" checked={settings.infiniteWaterSpread} onChange={(event) => onUpdateSetting('infiniteWaterSpread', event.target.checked)} /> 水流无限蔓延</label>
-      <button type="button" className="panel-command" onClick={onReturnToMenu}>返回菜单</button>
+      </div>
+      <button type="button" className="panel-command" onClick={onReturnToMenu}>{isMobile ? '返回主菜单' : '返回菜单'}</button>
     </section>
   );
 }

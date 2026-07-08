@@ -759,7 +759,7 @@ export function App() {
       )}
 
       {overlay === 'settings' && (
-        <SettingsPanel settings={settings} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} />
+        <SettingsPanel isMobile={isTouch} settings={settings} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} />
       )}
 
       {overlay === 'model' && selectedModel && (
