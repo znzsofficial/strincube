@@ -1,8 +1,8 @@
 import { Cuboid } from 'lucide-react';
 import type { WorldGenSettings } from '../game/blockGame';
+import type { SaveMeta } from '../saveStorage';
 
 type WorldMode = 'infinite' | 'finite' | 'flat';
-type SaveMeta = { id: string; name: string; savedAt: number };
 
 interface TitleScreenProps {
   densitySummary: string;
@@ -222,6 +222,7 @@ export function TitleScreen({
                     <div className="world-select-info">
                       <strong>{meta.name}</strong>
                       <small>{new Date(meta.savedAt).toLocaleString()}</small>
+                      <small>{meta.worldModeLabel} · {meta.worldSeedLabel}</small>
                     </div>
                     <div className="world-select-actions">
                       <button type="button" className="world-play-btn" onClick={() => onLoadGame(meta.id)}><iconify-icon icon="lucide:play" width="14"></iconify-icon> 进入世界</button>

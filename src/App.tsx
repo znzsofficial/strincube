@@ -380,12 +380,12 @@ export function App() {
     if (screen === 'game' && gameRef.current) {
       lockIntentRef.current = true;
       if (isTouch) {
-        gameRef.current.touchLock();
+        if (!showTouchFullscreenPrompt) gameRef.current.touchLock();
       } else {
         gameRef.current.lockControls();
       }
     }
-  }, [screen, isTouch]);
+  }, [screen, isTouch, showTouchFullscreenPrompt]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -648,17 +648,16 @@ export function App() {
     );
   }
 
-  if (screen === 'loading') {
-    const worldRadius = getWorldRadius(worldGenSettings);
-    const loadingWorldMode = worldModeOf(worldGenSettings);
-    return <LoadingScreen loadingProgress={loadingProgress} mountRef={mountRef} worldMode={loadingWorldMode} worldRadius={worldRadius} />;
-  }
+  const isLoadingScreen = screen === 'loading';
+  const loadingWorldRadius = getWorldRadius(worldGenSettings);
+  const loadingWorldMode = worldModeOf(worldGenSettings);
 
   return (
-    <main className="game-shell">
+    <main className={isLoadingScreen ? 'game-shell loading-screen' : 'game-shell'}>
       <div
         ref={mountRef}
         className="game-canvas"
+        style={isLoadingScreen ? { position: 'absolute', opacity: 0, pointerEvents: 'none' } : undefined}
         aria-label="可爱的方块世界游戏画面"
         onPointerDown={() => {
           if (overlayRef.current === null && !isLockedRef.current && !snapshot.isDead) {
@@ -666,6 +665,11 @@ export function App() {
           }
         }}
       />
+
+      {isLoadingScreen && <LoadingScreen loadingProgress={loadingProgress} worldMode={loadingWorldMode} worldRadius={loadingWorldRadius} />}
+
+      {!isLoadingScreen && (
+        <>
 
       <GameOverlays
         heldItemLabel={inventoryItemLabel(heldItem)}
@@ -698,6 +702,7 @@ export function App() {
           onOpenSettings={() => openOverlayPanel('settings')}
           onSave={saveGame}
           onImportModel={() => openFilePicker(fileInputRef.current)}
+          onImportMmdFolder={() => openFilePicker(folderInputRef.current)}
           onReturnToTitle={returnToTitle}
         />
       )}
@@ -777,6 +782,9 @@ export function App() {
           onOpenInventory={() => openOverlayPanel('inventory')}
           onSelectHotbarSlot={selectHotbarSlot}
         />
+      )}
+
+        </>
       )}
 
     </main>

@@ -3,6 +3,7 @@ import { Cuboid } from 'lucide-react';
 interface MobilePauseMenuProps {
   saveStatus: string;
   onContinue: () => void;
+  onImportMmdFolder: () => void;
   onOpenInventory: () => void;
   onOpenSettings: () => void;
   onSave: () => void;
@@ -13,6 +14,7 @@ interface MobilePauseMenuProps {
 export function MobilePauseMenu({
   saveStatus,
   onContinue,
+  onImportMmdFolder,
   onOpenInventory,
   onOpenSettings,
   onSave,
@@ -40,6 +42,7 @@ export function MobilePauseMenu({
       <div className="mobile-menu-actions secondary">
         <button type="button" onClick={onSave}><iconify-icon icon="lucide:save" width="16"></iconify-icon> 保存游戏</button>
         <button type="button" onClick={onImportModel}><iconify-icon icon="lucide:upload" width="16"></iconify-icon> 导入模型</button>
+        <button type="button" onClick={onImportMmdFolder}><iconify-icon icon="lucide:folder-open" width="16"></iconify-icon> 导入 MMD</button>
       </div>
       {saveStatus && <p className="save-status">{saveStatus}</p>}
       <button type="button" className="mobile-menu-exit" onClick={onReturnToTitle}><iconify-icon icon="lucide:log-out" width="16"></iconify-icon> 返回主菜单</button>
