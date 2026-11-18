@@ -12,8 +12,8 @@ StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and Type
 - [Deployment record](docs/DEPLOYMENT.md): production release and publishing procedure.
 - [Remaining work](docs/ROADMAP.md): prioritized tasks and acceptance criteria.
 
-The 2026-11-17 release is deployed as `cb479810`. Its verification completed with
-63 Node tests, 91 browser assertions and a production build; see the deployment
+The 2026-11-18 stable WebGL release is deployed as `80162abe`. Its verification completed with
+81 Node tests, 104 browser assertions and a production build; see the deployment
 record for source-control status and online smoke-test results.
 
 ## Current Highlights
@@ -98,11 +98,14 @@ This lets infinite worlds stay persistent without serializing every generated bl
 
 Saves are local to the browser profile and site origin. The Pages domain, custom
 domain and individual deployment URLs have separate save databases. Use the same
-address to revisit a world. In the development version, select **导出 → 下载备份**
+address to revisit a world, or select **导出 → 下载备份**
 beside a saved world to keep a `.strincube` file. On another origin or device,
 **导入世界备份** validates that file and adds a separate save; it does not replace
-the original. Saving is manual. The published `cb479810` version predates these
-backup controls. See [remaining work](docs/ROADMAP.md#save-management).
+the original. Settings also offer per-world autosave (off by
+default, every 60 seconds when enabled). Manual and automatic requests serialize
+per world; newer queued snapshots replace older queued snapshots. Use **本站存储空间**
+on the title screen for an approximate origin-wide capacity reading. Before closing
+the tab, save manually and wait for confirmation if you need the latest edits.
 
 ## World Generation
 

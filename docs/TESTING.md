@@ -44,6 +44,7 @@ between work sessions. Stop local servers when their checks are complete.
 | `/tests/browser.html` | Real WebGL, module Workers, IndexedDB, GLTF persistence, generated PMD/VMD smoke, input/menu races, atlas pixel comparisons/fallback, quality settings and repeated context loss/restoration |
 | `/tests/performance.html` | Fixed-seed A/B rendering plus separate terrain/mesh Worker measurements; click **运行基准** and wait for `DONE` |
 | `/tests/webgpu.html` | Standalone terrain test: compare captured WebGPU and WebGL frames, inspect the actual backend after initialization, and exercise both fallback paths |
+| `/tests/webgpu-mmd.html` | Click **运行验证**: compare pixel regions and interpolated bone motion at four frames with a generated textured PMD and three VMD keys. `?forceWebGL` exercises explicit native-test skip. |
 | `/tests/settings.html` | Actual desktop settings component, interactive preset and detail controls |
 | `/tests/settings.html?mobile` | Actual touch settings panel; inspect at a mobile viewport |
 
@@ -70,6 +71,17 @@ the production domain and verify the entry asset filenames match `dist/index.htm
 Localhost, production and per-deployment URLs use separate browser storage.
 
 ## Last completed verification
+
+**2026-11-18 release `80162abe` (source `f79c748`):** 81 Node tests, 104 top-level browser
+assertions and the production build passed. The Chromium menu/autosave subset
+also passed independently (15/15) with real IndexedDB and WebGL. It covers a
+stale timer callback after disabling autosave, delayed and coalesced writes,
+quota versus metadata-refresh failures, and restoring the latest hotbar and
+autosave preference after reopening. These are single-tab checks. The periodic
+timer runs while a world is open, including while paused; background tabs can be
+throttled. There is no guaranteed final write on browser/tab close. The in-game
+return action is blocked during pending writes and prompts before discarding
+progress after a failed save.
 
 For the **2026-11-17** release:
 

@@ -64,6 +64,10 @@ automatically; the application reads only its IndexedDB saves.
   Instance appearance must use independent materials. Save original files and paths.
 - `engine/persistence.ts` atomically stores saves and metadata in IndexedDB. Do not
   put model blobs in localStorage or fetch full blobs just to draw the save list.
+- Treat `navigator.storage.estimate()` as optional origin-wide telemetry, never a
+  precondition for saving. Report write failures after transaction abort; preserve
+  the originating request error so quota exhaustion can be distinguished from a
+  generic abort. Do not advise clearing the site's only copy of a player's world.
 - Loading v3 creates the runtime from the save directly. Never generate a temporary
   new world and discard it as part of loading.
 - UI control state belongs to `ui/controlState.ts`: panels, resume prompts and play

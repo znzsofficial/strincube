@@ -1,6 +1,6 @@
 # Remaining work
 
-Planning baseline: production deployment `cb479810` (2026-11-17).
+Planning baseline: stable WebGL deployment `80162abe` (2026-11-18), source `f79c748`.
 This is the repository's handoff checklist; update it when acceptance is completed.
 Deployment authorization does not imply authorization to commit or push source.
 
@@ -12,10 +12,10 @@ Deployment authorization does not imply authorization to commit or push source.
    P95, CPU stages, draw calls and queue recovery after movement stops. Collect
    symmetric frame samples on both sides before comparing frame rates. The working
    tree now samples RAF intervals on both sides; real-device baselines are pending.
-2. **Two independent deliverables.** Prototype WebGPU in a development-only scene
-   against that WebGL reference; in parallel, build validation and portable backups
-   for v3 saves. The renderer experiment does not require a new save format. Avoid
-   mixing renderer selection with the low/medium/high quality presets.
+2. **Validate the optional renderer and real models.** Terrain and a generated
+   textured PMD/VMD now run in WebGPU fixtures. Next check real character materials,
+   shadows, effects and device loss against the stable WebGL renderer. Keep backend
+   selection independent of the low/medium/high quality presets.
 3. **Use the results to choose the next release.** Expose an optional renderer only
    once native execution, fallback and gameplay compatibility are demonstrated.
    Schedule optimization by measured bottleneck. Collect fixed-seed terrain images
@@ -45,18 +45,17 @@ select a different backend.
 - [x] Separate terrain/mesh Workers, bounded queues, stale rejection and failure fallback.
 - [x] Material atlas batching, shadow refresh budgets and low/medium/high quality presets.
 - [x] Menu/input race fixes, performance diagnostics and repeated WebGL restoration.
-- [x] 63 Node tests, 91 browser assertions, production build and online world-creation smoke.
+- [x] 81 Node tests, 104 browser assertions, production build and online world-creation smoke.
 - [x] Production deployment; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Source archival — next housekeeping task
+## Source archival
 
-Treat production `cb479810` as the reference when comparing new renderer or save
-work. Review the pending source archive before interleaving new changes; later
-documentation edits and gitignored texture inputs are not identified by the Pages SHA.
+Use `f79c748` as the application source reference for `80162abe`. A fresh build
+still requires the separately supplied texture inputs documented in the setup guide.
 
-- [ ] After explicit authorization, review and commit/push the rebuild and optimization changes.
-- [ ] Record the resulting source revision alongside the deployment record; account
-  for local gitignored textures when documenting build reproducibility.
+- [x] Rebuild and subsequent backup/WebGPU prototype changes were committed and
+  pushed as `d22dda6`. The deployment record distinguishes this development
+  snapshot from the earlier direct upload and setup documents local texture inputs.
 
 Acceptance: source history identifies what was released; a deployment's older Git
 metadata is not presented as the complete source revision of this dirty-tree upload.
@@ -89,11 +88,12 @@ results. Generated PMD/VMD fixtures and mobile viewport layouts are not substitu
   If a manual save arrives during another write, test that the latest requested
   state for that world survives a close/reload.
 
-- [x] Development: title-screen export/import of v3 edits and model resources;
+- [x] Released: title-screen export/import of v3 edits and model resources;
   import validates the portable file before inserting a distinct world and metadata.
-- [ ] Autosave with clear state and failure handling, coordinated with manual saves.
-- [ ] Storage-capacity feedback and actionable write-failure messages.
-- [x] Development: shared v3 structural validation before runtime construction,
+- [x] Released: opt-in 60-second per-world autosave, coordinated with manual
+  saves, with committed/list-refresh-failed and write-failed states distinguished.
+- [x] Released: origin-wide capacity estimation and actionable quota feedback.
+- [x] Released: shared v3 structural validation before runtime construction,
   local loading and portable import. Actual model decoding still happens on load.
 
 Acceptance: populated worlds round-trip through export/import; concurrent save paths
@@ -133,3 +133,10 @@ the stable WebGL renderer after an initialization failure. The fixture adds a po
 to the fixed world; its 101,564 triangles are not the main benchmark's 101,482.
 Real MMD materials, shadows, postprocessing and gameplay/device-loss lifecycle
 remain gates for a player-facing backend selector.
+
+The development fixture `/tests/webgpu-mmd.html` now exercises a generated PMD
+with two bones, a relative diffuse PNG and a keyed VMD. The standard loader supplies
+the skeleton/animation; a narrow node-material adapter borrows the diffuse map.
+This bypasses the incompatible dedicated WebGPU shadow entry for this experiment.
+It does not establish parity for sphere maps, SDEF/QDEF, proxy meshes, outlines,
+material morphs, self-shadows, IK/physics or a real character's appearance.

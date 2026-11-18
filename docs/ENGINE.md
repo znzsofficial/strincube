@@ -19,7 +19,7 @@ The React UI calls the `BlockGameApi` facade. The factory takes
 `initialSave` and `AbortSignal`; restoration finishes before returning the API.
 There is no imperative `load()` method or engine-selection branch.
 
-In the development version, `saveValidation.ts` validates the v3 structure and
+`saveValidation.ts` validates the v3 structure and
 cross-references before restoration. Portable `.strincube` backups use a separate
 archive version (v1): a length-prefixed UTF-8 manifest and the original binary
 files, checked with SHA-256. A digest detects corruption, not authorship. Archive
@@ -28,6 +28,14 @@ screen prepares a download link on demand. Import validates before writing; new
 world and metadata rows use IndexedDB `add` in one transaction, never overwriting
 an existing key. Relative asset paths are carried separately from browser `File`
 metadata so restored model folders can be reconstructed on another origin.
+
+`SaveCoordinator` serializes detached snapshots per world, keeping at most one
+replacement behind the active write. Requests replaced before writing share the
+newest queued result. Successful commits and metadata-list refresh errors are
+reported separately. World ID/name are reserved before the first write starts;
+session/revision guards prevent stale callbacks changing another world's UI.
+Opt-in autosave is per world (60 s while the game is open), not an unload hook or a
+cross-tab lock. Browser storage estimates are optional, approximate and origin-wide.
 
 ## Modules
 
