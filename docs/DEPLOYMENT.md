@@ -6,8 +6,23 @@ Cloudflare Pages project: `strincube`, production branch: `master`.
 
 - Production: https://strincube.pages.dev
 - Custom domain: https://game.nekolaska.vip
-- Current deployment: https://c7d25129.strincube.pages.dev
-- Previous stable deployment: https://8a4f83e4.strincube.pages.dev
+- Current deployment: https://ada963e1.strincube.pages.dev
+- Previous stable deployment: https://c7d25129.strincube.pages.dev
+
+## 2026-11-18 — valley launcher, textured sky and live renderer switching
+
+Application source: [`921fc22`](https://github.com/znzsofficial/strincube/commit/921fc22).
+The launcher shows the seed-42 river valley. In play, both renderers draw the sun,
+moon and pixel clouds. Rock and snow use original tiles, and loaded water surfaces
+have a ripple texture on their first draw. This release also updates fast-turn
+input and lets a player jump from a one-cell pool onto a one-block bank.
+
+**Pause → Settings → 渲染后端** switches the running world's renderer. On the live
+Pages site, Edge created a world and switched WebGL → native WebGPU → WebGL in
+its pause menu. Each switch left one canvas with the requested context. Both
+production domains served `index-4NM7JU8P.js` and `index-BBR9WAZX.css`.
+97 Node tests, 109 browser assertions and the production build passed. Save
+format and terrain generator are unchanged.
 
 ## 2026-11-18 — opt-in WebGPU and walkable atlas
 
