@@ -10,7 +10,7 @@ export function verifyPostProcessing(
   try {
     view.draw(0.28, 1 / 60);
     const baseline = view.renderer.info.memory.textures;
-    assert(baseline === 0, '关闭后处理时不分配渲染目标纹理');
+    assert(baseline === 1, '基础天空仅上传一张云纹，关闭后处理时不分配渲染目标纹理');
     const fog = view.scene.fog as import('three').Fog;
     const air = fog.color.getHex();
     view.draw(.28, 1 / 60, 100, .6);

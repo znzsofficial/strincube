@@ -83,6 +83,8 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
           e.preventDefault();
           const dx = touch.clientX - lookLastPos.current.x;
           const dy = touch.clientY - lookLastPos.current.y;
+          const start = tapStart.current;
+          if (start && Math.hypot(touch.clientX - start.x, touch.clientY - start.y) >= 15) tapStart.current = null;
           lookLastPos.current = { x: touch.clientX, y: touch.clientY };
           onLook(dx, dy);
         }
@@ -92,7 +94,10 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
     const onLookEnd = (e: TouchEvent) => {
       for (const touch of Array.from(e.changedTouches)) {
         if (touch.identifier === lookTouchId.current) {
-          if (tapStart.current) {
+          // Quick swipes can finish beyond the last delivered move. A cancel
+          // carries no usable endpoint (some browsers send zero coordinates).
+          if (e.type === 'touchend') onLook(touch.clientX - lookLastPos.current.x, touch.clientY - lookLastPos.current.y);
+          if (e.type === 'touchend' && tapStart.current) {
             const dx = Math.abs(touch.clientX - tapStart.current.x);
             const dy = Math.abs(touch.clientY - tapStart.current.y);
             const dt = Date.now() - tapStart.current.time;

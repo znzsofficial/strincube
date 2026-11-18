@@ -3,6 +3,7 @@ import { PostProcessing } from './postProcessing';
 import type { GameSettings } from '../types';
 import type { RuntimeView } from './runtimeView';
 import { lightCycle, waterAtmosphere } from './daylight';
+import { VoxelSky } from './sky';
 import { normalizeShadowSettings, ShadowUpdatePolicy, type ShadowSettings } from '../shadowPolicy';
 
 export type ShadowDiagnostics = Readonly<{
@@ -47,6 +48,7 @@ export class GameScene implements RuntimeView {
   private observer?: ResizeObserver;
   private mount: HTMLElement;
   private settings: GameSettings;
+  private readonly skyLayer: VoxelSky;
   contextLost = false;
   private abort = new AbortController();
   constructor(mount: HTMLElement, settings: GameSettings, retained?: Pick<RuntimeView, 'scene' | 'camera'>) {
@@ -56,6 +58,7 @@ export class GameScene implements RuntimeView {
     this.settings = settings;
     this.shadowSettings = normalizeShadowSettings(settings);
     this.currentRenderer = this.createRenderer();
+    this.skyLayer = new VoxelSky(this.scene);
     this.sun.shadow.autoUpdate = false;
     // Three r187 only refreshes a directional shadow matrix in WebGLShadowMap,
     // after both needsUpdate gates; WebGLLights reuses that matrix. Unlike spot
@@ -217,11 +220,10 @@ export class GameScene implements RuntimeView {
     this.renderer.info.reset();
     this.shadowFrameUpdates = 0;
     const fog = this.scene.fog as THREE.Fog;
-    const daylight = lightCycle(time, this.scene.background as THREE.Color, fog.color, this.sun, this.ambient);
+    lightCycle(time, this.scene.background as THREE.Color, fog.color, this.sun, this.ambient);
     waterAtmosphere(eyeDepth, this.settings.viewDistance, this.scene.background as THREE.Color, fog, this.sun, this.ambient);
-    this.sun.position
-      .copy(this.camera.position)
-      .add(this.sunOffset.set(Math.sin(time * Math.PI * 2) * 55, 22 + daylight * 48, 25));
+    this.skyLayer.update(time,this.camera,this.scene.background as THREE.Color,eyeDepth,this.sunOffset);
+    this.sun.position.copy(this.camera.position).add(this.sunOffset);
     this.sun.target.position.copy(this.camera.position);
     if (this.contextLost) return;
     const direction = this.shadowDirection.copy(this.sunOffset).normalize();
@@ -237,6 +239,7 @@ export class GameScene implements RuntimeView {
     if (this.shadowFrameUpdates > 0) this.shadowPolicy.updated(elapsed, pose);
   }
   dispose() {
+    this.skyLayer.dispose();
     this.abort.abort();
     this.observer?.disconnect();
     this.scene.remove(this.sun, this.sun.target, this.ambient);

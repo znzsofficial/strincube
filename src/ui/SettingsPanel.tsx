@@ -7,6 +7,7 @@ interface SettingsPanelProps {
   rendererChoice?: React.ReactNode;
   actualBackend?: 'webgl' | 'webgpu';
   fallback?: boolean;
+  switching?: boolean;
   isMobile?: boolean;
   settings: GameSettings;
   onReturnToMenu: () => void;
@@ -14,13 +15,13 @@ interface SettingsPanelProps {
   onUpdateSettings: (patch: Partial<GameSettings>) => void;
 }
 
-export function SettingsPanel({ isMobile = false, settings, rendererChoice, actualBackend = 'webgl', fallback, onReturnToMenu, onUpdateSetting, onUpdateSettings }: SettingsPanelProps) {
+export function SettingsPanel({ isMobile = false, settings, rendererChoice, actualBackend = 'webgl', switching, fallback, onReturnToMenu, onUpdateSetting, onUpdateSettings }: SettingsPanelProps) {
   return (
     <section className={isMobile ? 'mobile-settings-panel settings-panel' : 'side-panel settings-panel'} aria-label="设置">
       <header><Settings size={18} aria-hidden="true" /> 设置</header>
       <div className="settings-panel-scroll">
       {rendererChoice}
-      <p className="quality-hint" role="status">当前使用：{actualBackend === 'webgpu' ? 'WebGPU' : 'WebGL'}{fallback && '（WebGPU 不可用，已自动回退）'}。更改后，下次进入世界生效。</p>
+      <p className="quality-hint" role="status">{switching ? '正在切换渲染后端…' : <>当前使用：{actualBackend === 'webgpu' ? 'WebGPU' : 'WebGL'}{fallback && '（WebGPU 不可用，已自动回退）'}。切换后可直接继续游戏。</>}</p>
       {actualBackend === 'webgpu' && <p className="quality-hint">WebGPU 使用直接渲染，暂不支持阴影和后处理。复杂角色材质建议使用 WebGL。</p>}
       <label className="toggle-row"><input type="checkbox" aria-label="自动保存" checked={settings.autosave} onChange={event => onUpdateSetting('autosave', event.target.checked)} /> 自动保存 · 每 {AUTOSAVE_INTERVAL_MS / 1000} 秒</label>
       <p className="quality-hint">每个世界默认关闭。开关随世界保存；离开前可手动保存最新进度。</p>

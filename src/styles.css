@@ -2551,4 +2551,46 @@ input:focus-visible {
   box-shadow: 0 .5rem 1.5rem oklch(0 0 0 / .3);
 }
 .game-error span { flex: 1; overflow-wrap: anywhere; }
+
+/* The launcher uses a still from seed 42; opening a menu never starts a second
+   3D world or takes a graphics context away from an entering game. */
+.valley-home {
+  background: linear-gradient(0deg, #101f1cec, #0a1b1650 62%, #12332916), url('./assets/terrain/river-valley.jpg') center 45% / cover;
+  color: #fff9e9;
+}
+.valley-home::before { display:none; }
+.valley-home .title-content {
+  width:min(1120px,92%); text-align:left; display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(295px,390px); column-gap:clamp(22px,6vw,100px);
+  align-content:end; align-items:start; margin:auto 0 clamp(20px,8dvh,84px);
+}
+.valley-home .title-logo, .valley-home .title-content:not(.world-creator-open) .title-logo {
+  grid-column:1; display:inline-flex; align-items:center; justify-content:start; gap:8px;
+  background:none; border:0; box-shadow:none; margin:0 0 10px; width:auto; height:auto;
+  font-weight:800; color:#fff9e9; text-shadow:0 1px 4px #14231f;
+}
+.valley-home .title-icon { width:26px; height:26px; color:#edfaac; animation:none; filter:none; }
+.valley-home .title-content h1 { grid-column:1; color:#fff9eb; font-size:clamp(3.3rem,7vw,6.8rem); line-height:1; letter-spacing:-.045em; margin:0; }
+.valley-home .title-subtitle { grid-column:1; font-size:1rem; color:#f3f4dc; margin:12px 0 24px; text-shadow:0 2px 8px #15261f; }
+.valley-home .title-content > .start-button { grid-column:1; justify-self:start; padding:12px 22px; gap:28px; }
+.valley-home .start-button::after { content:'→'; }
+.valley-atlas { grid-column:1; justify-self:start; color:#f4f5df; padding:12px 0; text-underline-offset:4px; }
+.world-library { grid-column:2; grid-row:1 / span 5; align-self:end; min-width:0; padding:20px; color:var(--menu-ink); background:#152621f5; border-radius:12px; }
+.world-library header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.world-library h2 { font-size:1.17rem; margin:0; }
+.world-library header > span { color:#cee39b; font-variant-numeric:tabular-nums; }
+.world-library .world-select-item { flex-wrap:wrap; }
+.world-library .world-select-info { flex-basis:100%; }
+.world-library .world-select-actions { flex-wrap:wrap; }
+.world-library .world-select-empty { color:#becfbf; padding:12px 8px; text-align:left; }
+.world-library .world-backup-tools { border-top:1px solid #45574b; padding-top:12px; justify-items:start; gap:8px; }
+.world-library .renderer-choice { width:100%; }
+.valley-help { margin-top:8px; color:#d5dfcd; font-size:.84rem; }
+.valley-help summary { cursor:pointer; padding:5px 0; }
+.valley-help .title-controls { margin:6px 0 0; grid-template-columns:1fr; }
+@media(max-width:740px) {
+  .valley-home .title-content { width:min(460px,100%); grid-template-columns:minmax(0,1fr); margin:auto 0; padding:clamp(20px,9dvh,75px) 0 8px; }
+  .world-library { grid-column:1; grid-row:auto; margin-top:8px; }
+  .valley-home .title-content > .start-button { width:100%; justify-content:space-between; }
+}
 .game-error button { min-height: 2.75rem; padding: .5rem .75rem; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: .4rem; cursor: pointer; }

@@ -1,6 +1,6 @@
 import { Color, type DirectionalLight, type Fog, type HemisphereLight } from 'three';
 
-const night = new Color(0x263453), day = new Color(0xa8d4ee);
+const night = new Color(0x263453), day = new Color(0x9bdeff), haze = new Color(0xe2f4ff);
 const dawn = new Color(0xffbc96), dusk = new Color(0xd890ad);
 const moon = new Color(0xb8ccff), noon = new Color(0xffedcd), gold = new Color(0xffb472);
 const nightBounce = new Color(0x505e8e), dayBounce = new Color(0xc4e9ff);
@@ -13,8 +13,11 @@ export function lightCycle(time: number, sky: Color, fog: Color, sun: Directiona
   const daylight = smooth((altitude + .19) / .9);
   const twilight = smooth(1 - Math.abs(altitude) / .44);
   const horizon = time < .5 ? dawn : dusk;
-  sky.copy(night).lerp(day, daylight).lerp(horizon, twilight * .66);
-  fog.copy(sky).lerp(horizon, twilight * .55);
+  // The sky brightens ahead of direct sunlight; the default early morning
+  // should already read as blue sky, rather than purple-grey twilight.
+  const skyDay = smooth((altitude + .24) / .52);
+  sky.copy(night).lerp(day, skyDay).lerp(horizon, twilight * .42);
+  fog.copy(sky).lerp(haze, skyDay * .22).lerp(horizon, twilight * .55);
   ambient.color.copy(nightBounce).lerp(dayBounce, daylight).lerp(horizon, twilight * .28);
   ambient.intensity = .55 + daylight * 1.15;
   sun.color.copy(moon).lerp(noon, daylight).lerp(gold, twilight);

@@ -191,6 +191,7 @@ export type RendererBackend = 'webgl' | 'webgpu';
 export type GameSnapshot = {
   rendererBackend?: RendererBackend;
   rendererFallback?: boolean;
+  rendererSwitching?: boolean;
   performance?: import('./diagnostics').PerformanceSnapshot;
   selectedBlock: BlockType;
   blockCount: number;
@@ -258,6 +259,7 @@ export type BlockGameOptions = {
 };
 
 export type BlockGameApi = {
+  switchRenderer(backend: RendererBackend): Promise<void>;
   setSelectedBlock: (block: BlockType) => void;
   setSelectedModel: (modelId: string | null) => void;
   lockControls: () => void | Promise<void>;

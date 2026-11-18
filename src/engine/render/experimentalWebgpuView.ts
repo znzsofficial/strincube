@@ -6,6 +6,7 @@ import type { GameSettings, RendererBackend } from '../types';
 import type { RuntimeView } from './runtimeView';
 import { GameScene } from './scene';
 import { lightCycle, waterAtmosphere } from './daylight';
+import { VoxelSky } from './sky';
 
 export class NativeWebGPUUnavailableError extends Error {
   readonly name = 'NativeWebGPUUnavailableError';
@@ -17,7 +18,8 @@ type Backend = WebGPURenderer['backend'] & {
   device?: GPUDevice;
 };
 
-export async function createExperimentalView(mount: HTMLElement, settings: GameSettings, signal?: AbortSignal) {
+type Retained = Pick<RuntimeView, 'scene' | 'camera'>;
+export async function createExperimentalView(mount: HTMLElement, settings: GameSettings, signal?: AbortSignal, retained?: Retained) {
   signal?.throwIfAborted();
   if (!navigator.gpu) throw new NativeWebGPUUnavailableError('WebGPU is unavailable in this browser context.');
   const { WebGPURenderer } = await import('three/webgpu');
@@ -35,7 +37,7 @@ export async function createExperimentalView(mount: HTMLElement, settings: GameS
       throw new NativeWebGPUUnavailableError('Three initialized WebGLBackend instead of native WebGPUBackend.');
     }
     if (!backend.isWebGPUBackend || !backend.device) throw new Error('Unknown renderer backend or missing GPUDevice.');
-    return new ExperimentalWebgpuView(mount, settings, renderer, canvas, backend.device);
+    return new ExperimentalWebgpuView(mount, settings, renderer, canvas, backend.device, retained);
   } catch (error) {
     canvas.remove();
     // In r187 dispose() awaits the same init promise; on a failed init it
@@ -47,13 +49,14 @@ export async function createExperimentalView(mount: HTMLElement, settings: GameS
 }
 
 export class ExperimentalWebgpuView implements RuntimeView {
-  readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(72, 1, .1, 220);
+  readonly scene: THREE.Scene;
+  readonly camera: THREE.PerspectiveCamera;
   private readonly mount: HTMLElement;
   private readonly nativeCanvas: HTMLCanvasElement;
   private readonly sun = new THREE.DirectionalLight(0xffedcd);
   private readonly ambient = new THREE.HemisphereLight(0xc4e9ff, 0x8b896c);
   private readonly sky = new THREE.Color();
+  private readonly skyLayer: VoxelSky;
   private readonly fog: THREE.Fog;
   private readonly observer: ResizeObserver;
   private settings: GameSettings;
@@ -78,7 +81,10 @@ export class ExperimentalWebgpuView implements RuntimeView {
   get nativeFrames() { return this.nativeCount; }
   get fallbackFrames() { return this.stableCount; }
 
-  constructor(mount: HTMLElement, settings: GameSettings, renderer: WebGPURenderer, canvas: HTMLCanvasElement, device: GPUDevice) {
+  constructor(mount: HTMLElement, settings: GameSettings, renderer: WebGPURenderer, canvas: HTMLCanvasElement, device: GPUDevice, retained?: Retained) {
+    this.scene = retained?.scene ?? new THREE.Scene();
+    this.skyLayer = new VoxelSky(this.scene);
+    this.camera = retained?.camera ?? new THREE.PerspectiveCamera(72, 1, .1, 220);
     this.mount = mount;
     this.native = renderer;
     this.device = device;
@@ -137,9 +143,10 @@ export class ExperimentalWebgpuView implements RuntimeView {
         this.stableCount++;
       } catch (error) { this.failRecovery(error); }
     } else if (this.native) {
-      const daylight = lightCycle(time, this.sky, this.fog.color, this.sun, this.ambient);
+      lightCycle(time, this.sky, this.fog.color, this.sun, this.ambient);
       waterAtmosphere(eyeDepth, this.settings.viewDistance, this.sky, this.fog, this.sun, this.ambient);
-      this.sun.position.set(Math.sin(time * Math.PI * 2) * 55, 22 + daylight * 48, 25).add(this.camera.position);
+      this.skyLayer.update(time,this.camera,this.sky,eyeDepth,this.sun.position);
+      this.sun.position.add(this.camera.position);
       this.sun.target.position.copy(this.camera.position);
       this.native.info.reset();
       this.native.render(this.scene, this.camera);
@@ -172,6 +179,7 @@ export class ExperimentalWebgpuView implements RuntimeView {
     this.device = undefined;
     this.observer.disconnect();
     this.nativeCanvas.remove();
+    this.skyLayer.dispose();
     // Only detach our environment. Meshes, shared textures, model/skeletons and
     // their ownership stay with the live session, not this renderer.
     this.scene.remove(this.ambient, this.sun, this.sun.target);

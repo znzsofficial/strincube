@@ -12,6 +12,7 @@ import { verifyBackupFlow } from './backupFlow';
 import { verifyPostProcessing } from './postProcessing';
 import { verifyMmd } from './mmdSmoke';
 import { verifyTerrainWorker } from './workerSmoke';
+import { verifyShoreControls } from './shoreControls';
 import { runMeshSmoke } from './meshSmoke';
 import { verifyDiagnosticsHud } from './diagnosticsSmoke';
 import { verifyShadowQuality } from './shadowQuality';
@@ -203,6 +204,7 @@ document.querySelector('#run')!.addEventListener('click', async () => {
     }
     assert(cancelled && mount.querySelectorAll('canvas').length === 0, '取消初始化无残留画布');
     await verifyTerrainWorker(assert);
+    await verifyShoreControls(mount, assert);
     const meshResult = await runMeshSmoke();
     assert(meshResult.mode === 'worker' && meshResult.races === 'PASS', '网格 Worker 实际构建、过期结果丢弃、原子替换与退出清理通过');
     verifyDiagnosticsHud(assert);

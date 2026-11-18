@@ -49,7 +49,7 @@ import oakLogTopUrl from '../../assets/minecraft/textures/block/oak_log_top.png'
 import oakPlanksUrl from '../../assets/minecraft/textures/block/oak_planks.png';
 import sandUrl from '../../assets/minecraft/textures/block/sand.png';
 import poppyUrl from '../../assets/minecraft/textures/block/poppy.png';
-import stoneUrl from '../../assets/minecraft/textures/block/stone.png';
+import stoneUrl from '../assets/terrain/stone.png';
 import stoneBricksUrl from '../../assets/minecraft/textures/block/stone_bricks.png';
 import redstoneOreUrl from '../../assets/minecraft/textures/block/redstone_ore.png';
 import waterStillUrl from '../../assets/minecraft/textures/block/water_still.png';
@@ -83,7 +83,7 @@ import brownWoolUrl from '../../assets/minecraft/textures/block/brown_wool.png';
 import whiteStainedGlassUrl from '../../assets/minecraft/textures/block/white_stained_glass.png';
 
 // New textures
-import snowUrl from '../../assets/minecraft/textures/block/snow.png';
+import snowUrl from '../assets/terrain/snow.png';
 import clayUrl from '../../assets/minecraft/textures/block/clay.png';
 import mossBlockUrl from '../../assets/minecraft/textures/block/moss_block.png';
 import mossyCobblestoneUrl from '../../assets/minecraft/textures/block/mossy_cobblestone.png';
@@ -144,6 +144,21 @@ export function loadBlockTexture(url: string) {
   texture.minFilter = THREE.NearestMipmapNearestFilter;
   return texture;
 }
+
+// Boot-critical transparent surfaces must not sample an empty image while
+// TextureLoader is decoding. A shared opaque ripple tile gives them colour on
+// their very first draw; translucency is controlled by the material alone.
+function surfaceWater() {
+  const c = document.createElement('canvas'); c.width = c.height = 16;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#dbedf0'; ctx.fillRect(0,0,16,16);
+  for(const [x,y,w] of [[0,2,3],[3,1,2],[10,5,4],[8,6,2],[2,10,5],[12,14,4]]) {
+    ctx.fillStyle = '#ebf7f9'; ctx.fillRect(x,y,w,1);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter; return t;
+}
+const waterSurfaceMap = surfaceWater();
 
 export function createGrassPlantTexture() {
   const canvas = document.createElement('canvas');
@@ -459,7 +474,7 @@ export const blockMaterials = [
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(blackWoolUrl) }), // 40
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(basaltSideUrl) }), // 41
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(basaltTopUrl) }), // 42
-  new THREE.MeshLambertMaterial({ color: 0x7dbbff, map: loadBlockTexture(waterStillUrl), transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), // 43: surface also visible from below
+  new THREE.MeshLambertMaterial({ color: 0x469bbb, map: waterSurfaceMap, transparent: true, opacity: 0.67, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), // 43: surface also visible from below
   new THREE.MeshLambertMaterial({ color: 0x74b94f, map: createGrassPlantTexture(), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 44
   new THREE.MeshLambertMaterial({ color: 0x4f9d4b, map: loadBlockTexture(fernUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 45
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(deadBushUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 46
@@ -1052,4 +1067,4 @@ export function pickPlant(x: number, y: number, z: number, seededNoise: (x: numb
 }
 
 // Water material (exported separately for special use)
-export const waterMaterial = new THREE.MeshLambertMaterial({ color: 0x7dbbff, map: loadBlockTexture(waterStillUrl), transparent: true, opacity: 0.72, depthWrite: false });
+export const waterMaterial = new THREE.MeshLambertMaterial({ color: 0x469bbb, map: waterSurfaceMap, transparent: true, opacity: 0.67, depthWrite: false });

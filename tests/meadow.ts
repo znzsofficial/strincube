@@ -11,9 +11,10 @@ const mount = document.querySelector<HTMLElement>('#view')!;
 const view = new GameScene(mount, { ...defaultSettings(1), shadows: false });
 const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
 const cells = new Map<number, Cell>();
+const ridge = new URLSearchParams(location.search).has('ridge');
 for (let x = 0; x < 7; x++) for (let z = 0; z < 6; z++) {
   const top = z < 2 ? 2 : x < 3 && z < 4 ? 1 : 0;
-  for (let y = -1; y <= top; y++) cells.set(indexOf(x,y,z), {type: y === top ? (x === 3 && z < 4 ? 'stone' : 'grass') : 'dirt'});
+  for (let y = -1; y <= top; y++) cells.set(indexOf(x,y,z), {type: ridge ? (y===top && (z<2 || x+z<6) ? 'snow' : 'stone') : y === top ? (x === 3 && z < 4 ? 'stone' : 'grass') : 'dirt'});
 }
 cells.set(indexOf(4,1,3), {type:'grass'});
 const chunk = world.install({x:0, z:0, cells});

@@ -94,13 +94,14 @@ export function TitleScreen({
   }
 
   return (
-    <main className="game-shell title-screen">
+    <main className={`game-shell title-screen${showWorldSettings ? '' : ' valley-home'}`}>
       <div className={showWorldSettings ? 'title-content world-creator-open' : 'title-content'}>
         <div className="title-logo">
           <Cuboid size={52} className="title-icon" />
+          {!showWorldSettings && <span>方块沙盒</span>}
         </div>
         <h1>StrinCube</h1>
-        <p className="title-subtitle">一个可爱的方块世界</p>
+        <p className="title-subtitle">{showWorldSettings ? '一个可爱的方块世界' : '沿着河谷探索，找一片空地建家。'}</p>
         {showWorldSettings ? (
           <div className="world-settings">
             <div className="world-settings-header">
@@ -263,6 +264,12 @@ export function TitleScreen({
           </div>
         ) : (
           <>
+            <button type="button" className="start-button" disabled={busy} onClick={onStartNewWorld}>
+              创建新世界
+            </button>
+            <a className="valley-atlas" href="/atlas/">浏览地形地图 ↗</a>
+            <section className="world-library" aria-label="世界存档">
+            <header><h2>我的世界存档</h2><span>{String(saveMetaList.length).padStart(2, '0')}</span></header>
             <div className="world-select-list">
               {saveMetaList.length > 0 ? (
                 saveMetaList.map((meta) => (
@@ -287,12 +294,8 @@ export function TitleScreen({
                 <div className="world-select-empty">还没有存档，创建一个新世界吧</div>
               )}
             </div>
-            <button type="button" className="start-button" disabled={busy} onClick={onStartNewWorld}>
-              <iconify-icon icon="lucide:plus" width="18"></iconify-icon> 创建新世界
-            </button>
             <div className="world-backup-tools">
               {rendererChoice}
-              <a href="/atlas/">地形地图 · 查看种子与河谷样区</a>
               <input ref={fileInput} type="file" hidden accept=".strincube" aria-label="选择世界备份文件" onChange={event => {
                 const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
                 if (file) void transfer({ file });
@@ -302,7 +305,7 @@ export function TitleScreen({
               {message && <div role="status">{message} {url && download && <a href={url} download={download.filename}>下载备份</a>}</div>}
               <StorageCapacity revision={saveMetaList} />
             </div>
-            <div className="title-controls">
+            <details className="valley-help"><summary>操作指南</summary><div className="title-controls">
               <div className="title-controls-row">
                 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
                 <span><iconify-icon icon="lucide:move" width="12"></iconify-icon> 移动</span>
@@ -319,7 +322,8 @@ export function TitleScreen({
                 <kbd>手柄</kbd>
                 <span><iconify-icon icon="lucide:gamepad-2" width="12"></iconify-icon> 摇杆 / LT / RT</span>
               </div>
-            </div>
+            </div></details>
+            </section>
           </>
         )}
       </div>

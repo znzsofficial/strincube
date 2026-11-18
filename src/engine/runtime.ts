@@ -90,6 +90,7 @@ export async function createGame(
   selectionBox.dispose();
   let target: VoxelHit | null = null;
   let preferredBackend = options.rendererPreference ?? 'webgl';
+  let switching = false;
   const emit = () => {
     if (disposed || !models || !input) return;
     const p = player.state,
@@ -99,6 +100,7 @@ export async function createGame(
     if (perf && meshes) perf.meshExecution = { mode: meshes.mode, fallback: meshes.fallback };
     onSnapshot({
       rendererBackend: view?.rendererBackend,
+      rendererSwitching: switching,
       rendererFallback: preferredBackend === 'webgpu' && view?.rendererBackend === 'webgl',
       selectedBlock,
       blockCount: world.blockCount,
@@ -207,8 +209,8 @@ export async function createGame(
     dispose();
     throw error;
   }
-  const scene = view!,
-    chunkRenderer = meshes!,
+  let scene = view!;
+  const chunkRenderer = meshes!,
     controls = input!,
     modelSystem = models!;
   const camera = scene.camera;
@@ -413,6 +415,31 @@ export async function createGame(
   emit();
   raf = requestAnimationFrame(frame);
   const api: BlockGameApi = {
+    async switchRenderer(backend) {
+      if (disposed || switching) return;
+      preferredBackend = backend;
+      if (backend === scene.rendererBackend) { emit(); return; }
+      const previous = scene;
+      switching = true;
+      controls.unlock(); emit();
+      try {
+        const next = backend === 'webgpu'
+          ? await (await import('./render/experimentalWebgpuView')).createExperimentalView(mount, settings, diagnosticEvents.signal, previous)
+          : new GameScene(mount, settings, previous);
+        if (disposed) { next.dispose(); return; }
+        scene = view = next;
+        previous.dispose();
+        if (backend === 'webgl') {
+          camera.coordinateSystem = THREE.WebGLCoordinateSystem;
+          camera.updateProjectionMatrix();
+        }
+        controls.rebind(next.canvas);
+        next.invalidateShadows();
+      } catch (error) {
+        if (!disposed && backend !== 'webgpu') { preferredBackend = previous.rendererBackend ?? 'webgpu'; throw error; }
+        if (!disposed) console.warn('Keeping the current renderer:', error);
+      } finally { switching = false; emit(); }
+    },
     setSelectedBlock(type) {
       selectedBlock = type;
       selectedModel = null;
@@ -425,7 +452,7 @@ export async function createGame(
     },
     lockControls: () => {
       controls.rebind(scene.canvas);
-      if (scene.contextLost || scene.error) return Promise.reject(new Error('画面尚未恢复'));
+      if (switching || scene.contextLost || scene.error) return Promise.reject(new Error('画面尚未就绪'));
       return controls.lock();
     },
     unlockControls: () => controls.unlock(),
@@ -487,7 +514,7 @@ export async function createGame(
     touchPlace: (x, y) => interact(true, x, y),
     touchLock: () => {
       controls.rebind(scene.canvas);
-      if (scene.contextLost || scene.error) return;
+      if (switching || scene.contextLost || scene.error) return;
       controls.touchLock();
       const root = mount.closest('main') ?? mount;
       if (!document.fullscreenElement && navigator.userActivation?.isActive)

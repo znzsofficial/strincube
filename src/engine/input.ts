@@ -64,16 +64,15 @@ export class Input {
       { signal },
     );
     document.addEventListener('keyup', (e) => this.keys.delete(e.code), { signal });
-    document.addEventListener(
-      'mousemove',
-      (e) => {
-        if (this.active && document.pointerLockElement === canvas) {
-          this.lookX += e.movementX;
-          this.lookY += e.movementY;
-        }
-      },
-      { signal },
-    );
+    const mouseLook = (e: MouseEvent) => {
+      if (!this.active || document.pointerLockElement !== canvas) return;
+      if ('pointerType' in e && e.pointerType !== 'mouse') return;
+      // A coalesced move summarizes its samples. Consume the samples OR the
+      // summary, never both or the synthesized compatibility mouse event.
+      const samples = (e as PointerEvent).getCoalescedEvents?.();
+      for (const d of samples?.length ? samples : [e]) this.look(d.movementX, d.movementY);
+    };
+    document.addEventListener(typeof PointerEvent === 'function' ? 'pointermove' : 'mousemove', mouseLook, { signal });
     canvas.addEventListener(
       'pointerdown',
       (e) => {
@@ -107,7 +106,13 @@ export class Input {
     const canvas = this.canvas;
     this.wantsControl = true;
     try {
-      await canvas.requestPointerLock();
+      try {
+        await canvas.requestPointerLock({ unadjustedMovement: true });
+      } catch (error) {
+        if (!(error instanceof Error) || error.name !== 'NotSupportedError') throw error;
+        if (revision !== this.lockRevision || this.disposed) return;
+        await canvas.requestPointerLock();
+      }
       if (revision !== this.lockRevision || this.disposed) {
         if ((canvas !== this.canvas || !this.wantsControl) && document.pointerLockElement === canvas) document.exitPointerLock();
         return;

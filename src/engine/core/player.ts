@@ -37,7 +37,14 @@ export class Player {
   update(world: World, dt: number, moveX: number, moveZ: number, jump: boolean, speed: number) {
     if (this.dead) return;
     const p = this.state;
-    const swim = submergedDepth(world, p.x, p.y + .8, p.z, .01) > 0;
+    const waist = p.y + .8;
+    let swim = submergedDepth(world, p.x, waist, p.z, .01) > 0;
+    if (swim) {
+      // A single water cell on a solid bed is wading depth. Keep ordinary
+      // gravity and ground takeoff throughout the jump out of that column.
+      const x = Math.round(p.x), y = Math.round(waist), z = Math.round(p.z);
+      swim = !isSolid(world.get(x, y - 1, z)) || world.get(x, y + 1, z)?.type === 'water';
+    }
     if (swim) {
       const forward = Math.max(0, -moveZ) / Math.max(1, Math.hypot(moveX, moveZ));
       const targetY = forward * Math.sin(p.pitch) * speed * .65 - .45;

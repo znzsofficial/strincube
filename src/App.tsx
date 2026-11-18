@@ -71,8 +71,12 @@ function densityLabel(value: string | undefined) {
 export function App() {
   const isTouch = useTouchMode();
   const [rendererPreference, setRendererPreference] = useState(readRendererPreference);
-  const rendererChoice = <RendererChoice value={rendererPreference} onChange={(value: RendererPreference) => {
+  const rendererChoice = () => <RendererChoice value={rendererPreference} disabled={!!gameRef.current && snapshot.rendererSwitching} onChange={(value: RendererPreference) => {
     setRendererPreference(value); storeRendererPreference(value);
+    const game = gameRef.current;
+    void game?.switchRenderer(value).catch(error => {
+      if (gameRef.current === game) setGameError(`切换渲染后端失败：${String(error)}`);
+    });
   }} />;
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<BlockGameApi | null>(null);
@@ -649,7 +653,7 @@ export function App() {
       <>
       {gameError && <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>}
       <TitleScreen
-        rendererChoice={rendererChoice}
+        rendererChoice={rendererChoice()}
         densitySummary={densitySummary}
         finiteWorldRadius={finiteWorldRadius}
         saveMetaList={saveMetaList}
@@ -784,7 +788,7 @@ export function App() {
       )}
 
       {overlay === 'settings' && (
-        <SettingsPanel isMobile={isTouch} settings={settings} rendererChoice={rendererChoice} actualBackend={snapshot.rendererBackend} fallback={snapshot.rendererFallback} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} onUpdateSettings={updateSettings} />
+        <SettingsPanel isMobile={isTouch} settings={settings} rendererChoice={rendererChoice()} actualBackend={snapshot.rendererBackend} switching={snapshot.rendererSwitching} fallback={snapshot.rendererFallback} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} onUpdateSettings={updateSettings} />
       )}
 
       {overlay === 'model' && selectedModel && (

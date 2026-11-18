@@ -70,13 +70,15 @@ terrain visible and no runtime errors. After an authorized deployment, repeat on
 the production domain and verify the entry asset filenames match `dist/index.html`.
 Localhost, production and per-deployment URLs use separate browser storage.
 
-## Current release checks (`c7d25129`)
+## Release checks for the live renderer switch
 
 1. On the title screen, select **WebGPU（实验）**, reload and check that the choice persists. Enter a world on a supported browser. In **暂停 → 设置**, verify **当前使用：WebGPU** and confirm the canvas has a `webgpu` context. The saved preference alone is not evidence of native rendering.
-2. Repeat with the GPU API unavailable. World entry must succeed and settings must report **WebGL** with the fallback notice. Changing the preference in play must leave the current world running.
+2. In **暂停 → 设置**, switch back to WebGL, then to WebGPU. Check the actual canvas context each time and resume without reloading the world. Repeat with the GPU API unavailable: WebGL must remain playable and the panel must report the fallback.
 3. Open `/atlas/`, click a location and wait for **样区就绪**. This is the public atlas; forced device loss and the generated MMD scene are separate development checks.
 
-These paths passed on the live Pages site in Edge. The release also passed 96 Node tests, 107 browser assertions and a production build. See [deployment history](DEPLOYMENT.md) for asset names and source state.
+4. `/tests/browser.html` includes a one-cell pool: jump onto the bank, rotate quickly, reverse direction and release. `/tests/meadow.html?ridge` shows the new rock and snow tiles. On the title screen check that creation and save controls are reachable in portrait and short landscape windows.
+
+See [deployment history](DEPLOYMENT.md) for results, asset names and the application commit for each release.
 
 ## Regression scenarios and historical results
 

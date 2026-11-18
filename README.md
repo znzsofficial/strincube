@@ -14,7 +14,7 @@ StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and Type
 
 ## Try it in the game
 
-- **WebGPU:** On the title screen, below **创建新世界**, choose **渲染后端 → WebGPU（实验）**, then create or load a world. **暂停 → 设置** shows the backend actually in use, including WebGL fallback. Changes made there apply the next time you enter a world. For shadows, postprocessing or complex MMD character materials, use WebGL (the default).
+- **WebGPU:** Choose **渲染后端 → WebGPU（实验）** in the title screen's **我的世界存档** panel or switch live in **暂停 → 设置**. The panel shows the backend actually running; resume in the same world with your edits intact. If WebGPU is unavailable, WebGL stays active. Use WebGL (the default) for shadows, postprocessing or complex MMD character materials.
 - **[Seed atlas](https://strincube.pages.dev/atlas/):** Open **地形地图** from the title screen. Enter a seed to compare the old river valleys and the current watershed. Click either map to preview that location; use a keyboard and mouse to walk it. The preview does not write a save.
 
 See the [deployment record](docs/DEPLOYMENT.md) for the live build, source state and release checks.
@@ -53,12 +53,14 @@ Run `npm test` with Node 22.18+ for core regression checks. The development rout
 
 To swim, look down or up while moving forward, or use
 jump to rise. Submerging the camera shortens visibility and tints daylight; deep
-water is darker than shallow water. Flowing water uses its visible surface height.
+water is darker than shallow water. In a one-block-deep pool with a solid bed,
+move toward the bank and jump once to get out. The surface ripple texture is
+ready for the chunk's first draw.
 
 Equip a cat treat (ordinary or purple) and walk near
 a roaming creature: it follows the treat and stops a short distance away. Switch
 items to let it wander back. Try the time slider around 06:00 and 18:00 for the
-new sunrise and dusk lighting.
+sunrise and dusk lighting. Both renderers show a sun, moon and moving pixel clouds.
 
 | Input | Action |
 | --- | --- |

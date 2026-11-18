@@ -110,7 +110,7 @@ async function verify(report: Record<string, unknown>) {
     await userLock(api, '锁定原生画布并触发设备丢失');
     await until('检查原生指针锁', () => snapshot.isLocked && document.pointerLockElement === original);
     // Face a patch of flat ground two blocks ahead. Placement must go through the runtime raycast.
-    document.dispatchEvent(new MouseEvent('mousemove', { movementX: 60, movementY: 385 }));
+    document.dispatchEvent(new PointerEvent('pointermove', { pointerType:'mouse', movementX: 60, movementY: 385 }));
     await until('检查视角', () => camera.rotation.x < -.6 && Math.abs(camera.rotation.y) > .05);
     api.setSelectedBlock('diamondBlock');
     const rect = original.getBoundingClientRect();
