@@ -4,17 +4,25 @@ import { type BlockGameApi, type BlockGameOptions, type GameSnapshot, type World
 import { GameSession } from './core/session';
 import { validateWorldSave } from './saveValidation';
 import { EYE } from './core/player';
+import { submergedDepth } from './core/immersion';
 import { raycast, type VoxelHit } from './core/raycast';
 import { isPlant, SEA } from './core/voxel';
 import { Input } from './input';
 import { GameScene } from './render/scene';
+import type { RuntimeView } from './render/runtimeView';
+import type { GameSettings } from './types';
 import { ChunkRenderer } from './render/chunks';
 import { AmbientEntities } from './render/entities';
+import { BlockFeedback } from './render/blockFeedback';
 import { ModelSystem } from './modelSystem';
 import { TerrainWorkerSource } from './workers/terrainSource';
 import { FrameDiagnostics } from './diagnostics';
 
-export type RuntimeOptions = BlockGameOptions & { initialSave?: WorldSaveData; signal?: AbortSignal };
+export type RuntimeOptions = BlockGameOptions & {
+  initialSave?: WorldSaveData;
+  signal?: AbortSignal;
+  viewFactory?: (mount: HTMLElement, settings: GameSettings, signal?: AbortSignal) => Promise<RuntimeView>;
+};
 
 export async function createGame(
   mount: HTMLElement,
@@ -47,10 +55,11 @@ export async function createGame(
     },
     { signal: diagnosticEvents.signal },
   );
-  let view: GameScene | undefined,
+  let view: RuntimeView | undefined,
     meshes: ChunkRenderer | undefined,
     input: Input | undefined,
     models: ModelSystem | undefined,
+    feedback: BlockFeedback | undefined,
     ambient: AmbientEntities | undefined;
   let disposed = false,
     raf = 0,
@@ -104,7 +113,7 @@ export async function createGame(
             lakeBank: false,
             river: c.river,
             riverBank: false,
-            riverSource: 'terrain-v2',
+            riverSource: generator.version,
           }
         : undefined,
     });
@@ -116,6 +125,7 @@ export async function createGame(
     diagnosticEvents.abort();
     input?.dispose();
     ambient?.dispose();
+    feedback?.dispose();
     models?.dispose();
     meshes?.dispose();
     outline.geometry.dispose();
@@ -137,10 +147,11 @@ export async function createGame(
       options.signal,
     );
     options.signal?.throwIfAborted();
-    view = new GameScene(mount, settings);
+    view = options.viewFactory ? await options.viewFactory(mount, settings, options.signal) : new GameScene(mount, settings);
+    options.signal?.throwIfAborted();
     meshes = new ChunkRenderer(world, view.scene);
     meshes.updateShadows(settings.shadows);
-    input = new Input(view.renderer.domElement);
+    input = new Input(view.canvas);
     models = new ModelSystem(view.scene, settings, () => {
       view?.invalidateShadows();
       emit();
@@ -155,6 +166,7 @@ export async function createGame(
     const total = world.loadedCount;
     while (world.dirty.size || meshes.pending) {
       options.signal?.throwIfAborted();
+      if (view.error) throw view.error;
       meshes.flush(2);
       if (meshes.error) throw meshes.error;
       const built = meshes.metrics.published;
@@ -170,6 +182,7 @@ export async function createGame(
       );
     options.signal?.throwIfAborted();
     ambient = new AmbientEntities(world, view.scene, player.state.x, player.state.z);
+    feedback = new BlockFeedback(view.scene);
     options.onProgress?.('准备控制与光照 · 完成', 1);
   } catch (error) {
     dispose();
@@ -189,7 +202,7 @@ export async function createGame(
   const getHit = (screenX?: number, screenY?: number) => {
     syncCamera();
     if (screenX !== undefined && screenY !== undefined) {
-      const rect = scene.renderer.domElement.getBoundingClientRect();
+      const rect = scene.canvas.getBoundingClientRect();
       raycaster.setFromCamera(
         new THREE.Vector2(
           ((screenX - rect.left) / rect.width) * 2 - 1,
@@ -225,6 +238,7 @@ export async function createGame(
     emit();
   };
   const interact = (placing: boolean, screenX?: number, screenY?: number) => {
+    if (controls.rebind(scene.canvas) || scene.error || scene.contextLost) return;
     if (!controls.active || player.dead) return;
     const hit = getHit(screenX, screenY);
     raycaster.set(camera.position, direction);
@@ -255,15 +269,15 @@ export async function createGame(
       if (player.overlaps(px, py, pz)) return;
       const current = world.get(px, py, pz);
       if (current && current.type !== 'water' && !isPlant(current.type)) return;
-      world.set(
+      if (world.set(
         px,
         py,
         pz,
         selectedBlock === 'water' ? { type: 'water', level: 7, source: true } : { type: selectedBlock },
-      );
+      )) feedback?.play('place', selectedBlock, px, py, pz, normal);
     } else if (cell?.type !== 'bedrock') {
       if (cell?.type === 'tnt') simulation.prime(x, y, z);
-      else world.set(x, y, z, null);
+      else if (cell && world.set(x, y, z, null)) feedback?.play('break', cell.type, x, y, z, normal);
     }
     emit();
   };
@@ -275,8 +289,17 @@ export async function createGame(
   let completedMeshJobs = chunkRenderer.metrics.completed;
   let shadowMeshRevision = chunkRenderer.renderRevision;
   let previouslyHidden = document.hidden;
+  let viewWasLost = false;
   const frame = (now: number) => {
     if (disposed) return;
+    if (scene.error) {
+      controls.unlock();
+      options.onError?.(scene.error);
+      return; // Terminal display failure. Keep the session available for saving.
+    }
+    controls.rebind(scene.canvas);
+    if (scene.contextLost && !viewWasLost) controls.unlock();
+    viewWasLost = scene.contextLost;
     const frameStart = performance.now();
     const frameMs = last === undefined ? 0 : now - last;
     const hiddenSample = document.hidden || previouslyHidden || visibilityChanged;
@@ -329,14 +352,18 @@ export async function createGame(
       diagnostics.recordMeshWorker(chunkRenderer.metrics.buildMs, hiddenSample);
     }
     if (modelSystem.tick(controls.active ? dt : 0, camera)) scene.invalidateShadows();
-    ambient?.tick(dt, camera.position);
+    ambient?.tick(dt, camera.position, controls.active && !selectedModel && (selectedBlock === 'catTreat' || selectedBlock === 'purpleCatTreat'));
+    feedback?.tick(dt);
     target = controls.active ? getHit() : null;
     outline.visible = !!target;
-    if (target) outline.position.set(target.x, target.y, target.z);
+    if (target) {
+      const s = target.shape;
+      outline.position.set(target.x + (s?.x ?? 0), target.y + (s?.y ?? 0), target.z + (s?.z ?? 0));
+      outline.scale.set(s?.w ?? 1, s?.h ?? 1, s?.d ?? 1);
+    }
     const modelsEnd = performance.now();
-    scene.draw(session.timeOfDay, dt, now);
+    scene.draw(session.timeOfDay, dt, now, submergedDepth(world, camera.position.x, camera.position.y, camera.position.z));
     const renderEnd = performance.now();
-    const info = scene.renderer.info;
     diagnostics.recordFrame({
       frameMs,
       hidden: hiddenSample,
@@ -349,17 +376,12 @@ export async function createGame(
         total: renderEnd - frameStart,
       },
       resources: {
-        drawCalls: info.render.calls,
-        triangles: info.render.triangles,
-        geometries: info.memory.geometries,
-        textures: info.memory.textures,
-        programs: info.programs?.length ?? 0,
+        ...scene.frameResources(),
         residentChunks: world.loadedCount,
         renderedChunks: chunkRenderer.root.children.length,
         meshQueueDepth: world.dirty.size + chunkRenderer.pending,
         terrainQueueDepth: stream.queuedCount + Number(stream.pending),
         terrainAtlases: chunkRenderer.atlasCount,
-        shadowUpdates: scene.shadowDiagnostics.frameUpdates,
       },
     });
     if (now - lastSnapshot >= 250) {
@@ -382,7 +404,11 @@ export async function createGame(
       modelSystem.clearSelection();
       emit();
     },
-    lockControls: () => controls.lock(),
+    lockControls: () => {
+      controls.rebind(scene.canvas);
+      if (scene.contextLost || scene.error) return Promise.reject(new Error('画面尚未恢复'));
+      return controls.lock();
+    },
     unlockControls: () => controls.unlock(),
     importModelFile: (file, opts) => modelSystem.import([file], opts),
     importModelFiles: (files, opts) => modelSystem.import(files, opts),
@@ -441,6 +467,8 @@ export async function createGame(
     touchTap: (x, y) => interact(false, x, y),
     touchPlace: (x, y) => interact(true, x, y),
     touchLock: () => {
+      controls.rebind(scene.canvas);
+      if (scene.contextLost || scene.error) return;
       controls.touchLock();
       const root = mount.closest('main') ?? mount;
       if (!document.fullscreenElement && navigator.userActivation?.isActive)

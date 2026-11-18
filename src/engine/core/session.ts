@@ -1,6 +1,6 @@
 import { defaultWorldGenSettings, type GameSettings, type WorldGenSettings } from '../types';
 import { FixedClock, type Movement } from './clock';
-import { GENERATOR, TerrainGenerator } from './generator';
+import { supportsTerrain, TerrainGenerator } from './generator';
 import { findSpawn, Player, type PlayerState } from './player';
 import { Simulation, type SimulationState } from './simulation';
 import type { ChunkEdit } from './voxel';
@@ -62,7 +62,8 @@ export class GameSession {
     pixelRatio?: number;
     terrainSource?: (generator: TerrainGenerator) => ChunkSource;
   }) {
-    if (options.state && options.state.generator !== GENERATOR) {
+    const version = options.state?.generator;
+    if (options.state && !supportsTerrain(version)) {
       throw new Error('此存档的地形生成器版本不受支持');
     }
     this.settings = { ...defaultSettings(options.pixelRatio), ...options.settings, rendererBackend: 'webgl' };
@@ -70,7 +71,7 @@ export class GameSession {
     this.time = options.timeOfDay ?? this.settings.timeOfDay;
     this.settings.timeOfDay = this.time;
     this.world = new World(
-      new TerrainGenerator(options.seed, options.worldGen ?? defaultWorldGenSettings),
+      new TerrainGenerator(options.seed, options.worldGen ?? defaultWorldGenSettings, supportsTerrain(version) ? version : undefined),
       options.state?.edits,
     );
     this.simulation = new Simulation(this.world, options.state?.simulation);
@@ -112,7 +113,7 @@ export class GameSession {
   snapshot(): WorldState {
     if (this.disposed) throw new Error('世界已关闭，无法保存');
     return {
-      generator: GENERATOR,
+      generator: this.world.generator.version,
       edits: this.world.snapshot(),
       player: { ...this.player.state },
       simulation: this.simulation.snapshot(),

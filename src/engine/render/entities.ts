@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { World } from '../core/world';
-import { isSolid, positionOf } from '../core/voxel';
+import { BOTTOM, TOP, chunkCoord, indexOf, isSolid, positionOf, type Chunk } from '../core/voxel';
 
 export class AmbientEntities {
-  private creatures: { root: THREE.Group; x: number; z: number; phase: number }[] = [];
+  private creatures: { root: THREE.Group; x: number; z: number; phase: number;
+    tileX?: number; tileZ?: number; chunk?: Chunk; ground?: number }[] = [];
   private lights = new Map<string, THREE.PointLight>();
   private geometry = new THREE.BoxGeometry(1, 1, 1);
   private material = new THREE.MeshLambertMaterial({ color: 0xffd879 });
@@ -27,6 +28,7 @@ export class AmbientEntities {
     this.cleanup.push(
       world.onChunk(index),
       world.subscribe(({ x, y, z, after }) => {
+        for (const c of this.creatures) if (c.tileX === x && c.tileZ === z) c.tileX = undefined;
         const key = `${x},${y},${z}`;
         if (after && ['torch', 'lantern', 'soulLantern'].includes(after.type))
           this.candidates.set(key, { x, y, z, type: after.type });
@@ -63,21 +65,28 @@ export class AmbientEntities {
   get count() {
     return this.creatures.length;
   }
-  tick(dt: number, player: THREE.Vector3) {
+  tick(dt: number, player: THREE.Vector3, lure = false) {
     for (const c of this.creatures) {
       c.phase += dt * 0.3;
-      const x = c.x + Math.sin(c.phase) * 2,
-        z = c.z + Math.cos(c.phase) * 2;
-      let ground: number | undefined;
-      for (let y = this.world.generator.column(x, z).height + 4; y >= -32; y--)
-        if (isSolid(this.world.get(Math.round(x), y, Math.round(z)))) {
-          ground = y + 0.5;
-          break;
+      const pos = c.root.position;
+      const following = lure && Math.hypot(pos.x - player.x, pos.z - player.z) < 9 && Math.abs(player.y - pos.y) < 5;
+      const dx = (following ? player.x : c.x + Math.sin(c.phase) * 2) - pos.x;
+      const dz = (following ? player.z : c.z + Math.cos(c.phase) * 2) - pos.z;
+      const distance = Math.hypot(dx, dz);
+      const step = distance ? Math.max(0, Math.min(dt * (following ? 2.2 : 1.4), distance - (following ? 1.5 : 0))) / distance : 0;
+      const x = pos.x + dx * step, z = pos.z + dz * step;
+      const tx = Math.round(x), tz = Math.round(z), chunk = this.world.getChunk(chunkCoord(tx), chunkCoord(tz));
+      if (c.tileX !== tx || c.tileZ !== tz || c.chunk !== chunk) {
+        c.tileX = tx; c.tileZ = tz; c.chunk = chunk; c.ground = undefined;
+        if (chunk) for (let y = Math.min(TOP, this.world.generator.column(tx, tz).height + 4); y >= BOTTOM; y--) {
+          if (isSolid(chunk.cells.get(indexOf(tx, y, tz)) ?? null)) { c.ground = y + .5; break; }
         }
-      c.root.visible = ground !== undefined && this.world.isLoaded(x, z);
+      }
+      const ground = c.ground;
+      c.root.visible = ground !== undefined;
       if (ground !== undefined) {
         c.root.position.set(x, ground, z);
-        c.root.rotation.y = -c.phase;
+        if (distance > .01) c.root.rotation.y = Math.atan2(-dx, -dz);
       }
     }
     this.timer += dt;

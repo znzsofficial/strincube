@@ -1,5 +1,6 @@
 import { BOTTOM, TOP, chunkCoord, isSolid, type Position } from './voxel';
 import { World } from './world';
+import { submergedDepth } from './immersion';
 
 export const EYE = 1.62;
 const HEIGHT = 1.8,
@@ -36,9 +37,16 @@ export class Player {
   update(world: World, dt: number, moveX: number, moveZ: number, jump: boolean, speed: number) {
     if (this.dead) return;
     const p = this.state;
-    const swim = world.get(Math.round(p.x), Math.round(p.y + 0.8), Math.round(p.z))?.type === 'water';
-    if (jump && (this.grounded || swim)) this.velocityY = swim ? 4 : 7.2;
-    this.velocityY = Math.max(swim ? -3 : -35, this.velocityY - (swim ? 5 : 22) * dt);
+    const swim = submergedDepth(world, p.x, p.y + .8, p.z, .01) > 0;
+    if (swim) {
+      const forward = Math.max(0, -moveZ) / Math.max(1, Math.hypot(moveX, moveZ));
+      const targetY = forward * Math.sin(p.pitch) * speed * .65 - .45;
+      this.velocityY = jump ? 3.2 : targetY + (this.velocityY - targetY) * Math.exp(-5 * dt);
+      moveZ *= 1 - forward * (1 - Math.cos(p.pitch));
+    } else {
+      if (jump && this.grounded) this.velocityY = 7.2;
+      this.velocityY = Math.max(-35, this.velocityY - 22 * dt);
+    }
     const len = Math.max(1, Math.hypot(moveX, moveZ));
     const vx = ((Math.cos(p.yaw) * moveX + Math.sin(p.yaw) * moveZ) / len) * speed * (swim ? 0.6 : 1);
     const vz = ((-Math.sin(p.yaw) * moveX + Math.cos(p.yaw) * moveZ) / len) * speed * (swim ? 0.6 : 1);

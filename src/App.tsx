@@ -611,7 +611,7 @@ export function App() {
     }
   }
 
-  const isNight = snapshot.timeOfDay > 0.58;
+  const isNight = snapshot.timeOfDay < 0.25 || snapshot.timeOfDay >= 0.75;
   const autosaveMode = settings.autosave ? `自动保存：每 ${AUTOSAVE_INTERVAL_MS / 1000} 秒` : '自动保存已关闭';
   const pauseSaveStatus = saveStatus ? `${autosaveMode} · ${saveStatus}` : autosaveMode;
   const heldItem = hotbarItems[activeSlot];

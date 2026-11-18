@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Block feedback draw budget</title>
+<pre id="result">Running…</pre>
+<script type="module">
+  import * as THREE from 'three';
+  import { BlockFeedback } from '../src/engine/render/blockFeedback.ts';
+
+  const result = document.querySelector('#result');
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  try {
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(96, 96);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .01, 20);
+    camera.position.z = 3;
+    scene.add(new THREE.HemisphereLight());
+    const fx = new BlockFeedback(scene);
+    const calls = () => { renderer.render(scene, camera); return renderer.info.render.calls; };
+    const normal = { x: 0, y: 0, z: 1 };
+    assert(calls() === 0, 'idle effect submitted a draw');
+    fx.play('break', 'stone', 0, 0, 0, normal);
+    const mesh = scene.children.find(o => o.isInstancedMesh);
+    const pos = new THREE.Matrix4();
+    fx.tick(.05);
+    assert(calls() === 1, 'a break should use a single draw');
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, pos);
+      assert(pos.elements[14] > .5, 'chip did not leave the struck face');
+    }
+    fx.tick(1);
+    fx.play('place', 'water', 0, 0, 0, normal);
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, pos);
+      assert(pos.elements[14] < -.4, 'puff missed the contact seam');
+    }
+    for (let i = 0; i < 200; i++) fx.play('break', i % 2 ? 'glass' : 'leaves', 0, 0, 0, normal);
+    assert(calls() === 1 && mesh.count <= 80, 'rapid edits exceeded the pool or draw budget');
+    fx.tick(1);
+    assert(calls() === 0, 'expired pool submitted a draw');
+    fx.dispose();
+    assert(mesh.parent === null && renderer.info.memory.geometries === 0, 'geometry retained on dispose');
+    renderer.dispose();
+    result.textContent = 'PASS: face direction, contact seam, one active draw, zero idle draws, cap and cleanup';
+  } catch (error) { result.textContent = 'FAIL: ' + error; throw error; }
+</script>

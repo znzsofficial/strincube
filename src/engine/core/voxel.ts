@@ -43,7 +43,7 @@ const plants = new Set<BlockType>([
 ]);
 export const isPlant = (type: BlockType) => plants.has(type);
 export const isSolid = (cell: Cell | null | undefined) =>
-  !!cell && cell.type !== 'water' && !isPlant(cell.type);
+  !!cell && cell.type !== 'water' && cell.type !== 'riverPebbles' && !isPlant(cell.type);
 export const isFalling = (cell: Cell | null | undefined) =>
   !!cell && ['sand', 'redSand', 'gravel'].includes(cell.type);
 export const isLeaves = (type: BlockType) => type === 'leaves' || type.endsWith('Leaves');
@@ -51,6 +51,7 @@ export const transparent = (cell: Cell | null | undefined) =>
   !cell ||
   cell.type === 'water' ||
   cell.type === 'glass' ||
+  cell.type === 'riverPebbles' ||
   cell.type === 'ice' ||
   isPlant(cell.type) ||
   isLeaves(cell.type);

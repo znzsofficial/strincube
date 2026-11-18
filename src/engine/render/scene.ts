@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { PostProcessing } from './postProcessing';
 import type { GameSettings } from '../types';
+import type { RuntimeView } from './runtimeView';
+import { lightCycle, waterAtmosphere } from './daylight';
 import { normalizeShadowSettings, ShadowUpdatePolicy, type ShadowSettings } from '../shadowPolicy';
 
 export type ShadowDiagnostics = Readonly<{
@@ -12,17 +14,20 @@ export type ShadowDiagnostics = Readonly<{
   mapHeight: number;
 }>;
 
-export class GameScene {
-  readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(72, 1, 0.1, 220);
+export class GameScene implements RuntimeView {
+  readonly scene: THREE.Scene;
+  readonly camera: THREE.PerspectiveCamera;
   private currentRenderer: THREE.WebGLRenderer;
   private rendererReleased = false;
   get renderer() { return this.currentRenderer; }
+  get canvas() { return this.currentRenderer.domElement; }
+  frameResources() {
+    const info = this.renderer.info;
+    return { drawCalls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries,
+      textures: info.memory.textures, programs: info.programs?.length ?? 0, shadowUpdates: this.shadowFrameUpdates };
+  }
   private post?: PostProcessing;
   private size = { width: 0, height: 0, ratio: 0 };
-  private skyDay = new THREE.Color(0xa8d4ee);
-  private skyNight = new THREE.Color(0x101d39);
-  private skyColor = new THREE.Color();
   private sunOffset = new THREE.Vector3();
   private sun = new THREE.DirectionalLight(0xffedcd, 2.2);
   // This light is only a shadow-camera pose, never added to the scene. Direct
@@ -38,12 +43,14 @@ export class GameScene {
   private shadowFrameUpdates = 0;
   private shadowTotalUpdates = 0;
   private ambient = new THREE.HemisphereLight(0xc4e9ff, 0x8b896c, 1.7);
-  private observer: ResizeObserver;
+  private observer?: ResizeObserver;
   private mount: HTMLElement;
   private settings: GameSettings;
   contextLost = false;
   private abort = new AbortController();
-  constructor(mount: HTMLElement, settings: GameSettings) {
+  constructor(mount: HTMLElement, settings: GameSettings, retained?: Pick<RuntimeView, 'scene' | 'camera'>) {
+    this.scene = retained?.scene ?? new THREE.Scene();
+    this.camera = retained?.camera ?? new THREE.PerspectiveCamera(72, 1, 0.1, 220);
     this.mount = mount;
     this.settings = settings;
     this.shadowSettings = normalizeShadowSettings(settings);
@@ -70,8 +77,20 @@ export class GameScene {
       far: 180,
     });
     this.sun.shadow.bias = -0.0005;
-    this.scene.add(this.sun, this.sun.target, this.ambient);
-    mount.append(this.renderer.domElement);
+    try {
+      this.scene.add(this.sun, this.sun.target, this.ambient);
+      mount.append(this.renderer.domElement);
+      this.bindContextEvents();
+      this.observer = new ResizeObserver(() => this.resize());
+      this.observer.observe(mount);
+      this.apply(settings);
+    } catch (cause) {
+      // A failed constructor cannot return its canvas/resources to the caller.
+      this.dispose();
+      throw cause;
+    }
+  }
+  private bindContextEvents() {
     this.renderer.domElement.addEventListener(
       'webglcontextlost',
       (e) => {
@@ -100,10 +119,6 @@ export class GameScene {
       },
       { signal: this.abort.signal },
     );
-    this.observer = new ResizeObserver(() => this.resize());
-    this.observer.observe(mount);
-    this.apply(settings);
-    this.resize();
   }
   private createRenderer(canvas?: HTMLCanvasElement) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -197,21 +212,15 @@ export class GameScene {
   }
 
   /** nowMs is raw RAF time; dt remains the postprocessing animation delta. */
-  draw(time: number, dt: number, nowMs = performance.now()) {
+  draw(time: number, dt: number, nowMs = performance.now(), eyeDepth = 0) {
     this.renderer.info.reset();
     this.shadowFrameUpdates = 0;
-    const daylight = Math.max(0.08, Math.sin(time * Math.PI * 2));
-    const color = this.skyColor.copy(this.skyNight).lerp(this.skyDay, daylight);
-    (this.scene.background as THREE.Color).copy(color);
     const fog = this.scene.fog as THREE.Fog;
-    fog.color.copy(color);
-    fog.far = this.settings.viewDistance;
-    fog.near = Math.max(15, fog.far * 0.5);
-    this.ambient.intensity = 0.35 + daylight * 1.35;
-    this.sun.intensity = daylight * 2.2;
+    const daylight = lightCycle(time, this.scene.background as THREE.Color, fog.color, this.sun, this.ambient);
+    waterAtmosphere(eyeDepth, this.settings.viewDistance, this.scene.background as THREE.Color, fog, this.sun, this.ambient);
     this.sun.position
       .copy(this.camera.position)
-      .add(this.sunOffset.set(Math.cos(time * Math.PI * 2) * 55, 35 + daylight * 35, 25));
+      .add(this.sunOffset.set(Math.sin(time * Math.PI * 2) * 55, 22 + daylight * 48, 25));
     this.sun.target.position.copy(this.camera.position);
     if (this.contextLost) return;
     const direction = this.shadowDirection.copy(this.sunOffset).normalize();
@@ -228,7 +237,8 @@ export class GameScene {
   }
   dispose() {
     this.abort.abort();
-    this.observer.disconnect();
+    this.observer?.disconnect();
+    this.scene.remove(this.sun, this.sun.target, this.ambient);
     this.post?.dispose();
     this.releaseShadowTargets();
     if (!this.rendererReleased) this.renderer.dispose();

@@ -15,7 +15,7 @@ function stats(values: number[]) {
 
 /** Async wall time is explicitly separated from synchronous main-thread flush time. */
 export async function meshBenchmark() {
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) world.ensure(x, z);
   const renderer = new ChunkRenderer(world, new THREE.Scene());
   const mainFlush: number[] = [],

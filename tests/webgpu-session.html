@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,"><title>StrinCube · 游戏中 WebGPU 设备丢失验证</title>
+  <style>
+    body { font: 16px/1.5 system-ui; max-width: 52rem; margin: auto; padding: 1rem }
+    button { font: inherit } #mount { width: min(100%, 480px); aspect-ratio: 3/2; margin: .75rem 0 }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere }
+  </style>
+</head>
+<body>
+  <h1>游戏中 WebGPU 设备丢失验证</h1>
+  <p>请保持页面在前台。创建世界后，按提示锁定原生画布；游戏会放置方块并销毁自己的 GPUDevice。再次点击以验证恢复后的指针锁、拾取和移动。</p>
+  <button id="run" disabled>创建测试世界</button> <button id="lock" hidden></button>
+  <output id="status" aria-live="polite">加载中</output>
+  <div id="mount"></div><pre id="result"></pre>
+  <script type="module" src="./webgpu-session.ts"></script>
+</body>
+</html>

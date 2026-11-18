@@ -3,7 +3,7 @@ import { getWorldRadius } from './engine/types';
 import { worldSaves } from './engine/persistence';
 import { validateSaveSummary, validateWorldSave } from './engine/saveValidation';
 
-export type SaveMeta = { id: string; name: string; savedAt: number; worldModeLabel: string; worldSeedLabel: string };
+export type SaveMeta = { id: string; name: string; savedAt: number; seed: number; worldModeLabel: string; worldSeedLabel: string };
 
 function describeWorldMode(data: Pick<WorldSaveData, 'worldGen'>) {
   const settings = data.worldGen;
@@ -16,7 +16,7 @@ export async function getSaveMetaList(): Promise<SaveMeta[]> {
   const result: SaveMeta[] = [];
   for (const data of await worldSaves.list()) {
     try { validateSaveSummary(data); } catch { continue; } // A corrupt row must not hide other saves.
-    result.push({ id: data.id, name: data.name, savedAt: data.savedAt,
+    result.push({ id: data.id, name: data.name, savedAt: data.savedAt, seed: data.seed,
       worldModeLabel: describeWorldMode(data), worldSeedLabel: `种子 ${data.seed}` });
   }
   return result.sort((a, b) => b.savedAt - a.savedAt);

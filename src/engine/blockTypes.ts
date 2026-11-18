@@ -17,7 +17,7 @@ const keys = [
   'ice', 'packedIce', 'blueIce', 'coalBlock', 'ironBlock', 'goldBlock', 'diamondBlock', 'emeraldBlock', 'lapisBlock', 'redstoneBlock',
   'calcite', 'dripstone', 'tuff', 'brownMushroom', 'redMushroom', 'cactus', 'pumpkin', 'melon',
   'hay', 'lantern', 'soulLantern', 'torch', 'basicString', 'stringSeaBeacon', 'topologicalRing', 'crystalCore',
-  'catTreat', 'idealCoin', 'purpleCatTreat', 'dice', 'itemFrame',
+  'catTreat', 'idealCoin', 'purpleCatTreat', 'dice', 'itemFrame', 'riverPebbles',
 ] as const;
 
 export type BlockType = typeof keys[number];

@@ -33,6 +33,7 @@ type Job = {
 export class ChunkRenderer {
   private groups = new Map<string, THREE.Group>();
   private materials: THREE.Material[];
+  private contactMaterials = new Map<number, THREE.Material>();
   private batching?: TerrainMaterialBatching;
   private revision = 0;
   private frames = new Map<string, THREE.MeshLambertMaterial>();
@@ -177,6 +178,19 @@ export class ChunkRenderer {
     }
     return m;
   }
+  private terrainMaterial(id: number, colored: boolean) {
+    const source = this.materials[id];
+    if (!colored || source.vertexColors) return source;
+    // The same original material may serve an unshaded part in another chunk.
+    // Leave it and the atlas family inputs intact; share one variant per source.
+    let material = this.contactMaterials.get(id);
+    if (!material) {
+      material = source.clone();
+      material.vertexColors = true;
+      this.contactMaterials.set(id, material);
+    }
+    return material;
+  }
   private publish(key: string, parts: MeshPart[]) {
     const start = performance.now(),
       group = new THREE.Group();
@@ -192,7 +206,7 @@ export class ChunkRenderer {
         geometry.setIndex(new THREE.BufferAttribute(part.indices, 1));
         const s = part.sphere;
         geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(s.x, s.y, s.z), s.radius);
-        const mesh = new THREE.Mesh(geometry, typeof id === 'string' ? this.frame(id) : this.materials[id]);
+        const mesh = new THREE.Mesh(geometry, typeof id === 'string' ? this.frame(id) : this.terrainMaterial(id, !!part.colors));
         mesh.userData.water = id === 43;
         mesh.castShadow = this.shadows && id !== 43;
         mesh.receiveShadow = this.shadows;
@@ -319,6 +333,8 @@ export class ChunkRenderer {
     this.closeWorker();
     for (const key of [...this.groups.keys()]) this.remove(key);
     for (const m of this.materials) m.dispose();
+    for (const m of this.contactMaterials.values()) m.dispose();
+    this.contactMaterials.clear();
     this.batching?.dispose();
     for (const m of this.frames.values()) {
       m.map?.dispose();

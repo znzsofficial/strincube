@@ -32,14 +32,14 @@ import dandelionUrl from '../../assets/minecraft/textures/block/dandelion.png';
 import deadBushUrl from '../../assets/minecraft/textures/block/dead_bush.png';
 import diamondOreUrl from '../../assets/minecraft/textures/block/diamond_ore.png';
 import dioriteUrl from '../../assets/minecraft/textures/block/diorite.png';
-import dirtUrl from '../../assets/minecraft/textures/block/dirt.png';
+import dirtUrl from '../assets/terrain/earth.png';
 import emeraldOreUrl from '../../assets/minecraft/textures/block/emerald_ore.png';
 import fernUrl from '../../assets/minecraft/textures/block/fern.png';
 import goldOreUrl from '../../assets/minecraft/textures/block/gold_ore.png';
 import graniteUrl from '../../assets/minecraft/textures/block/granite.png';
 import grassSideOverlayUrl from '../../assets/minecraft/textures/block/grass_block_side_overlay.png';
-import grassSideUrl from '../../assets/minecraft/textures/block/grass_block_side.png';
-import grassTopUrl from '../../assets/minecraft/textures/block/grass_block_top.png';
+import grassSideUrl from '../assets/terrain/meadow-side.png';
+import grassTopUrl from '../assets/terrain/meadow.png';
 import gravelUrl from '../../assets/minecraft/textures/block/gravel.png';
 import ironOreUrl from '../../assets/minecraft/textures/block/iron_ore.png';
 import lapisOreUrl from '../../assets/minecraft/textures/block/lapis_ore.png';
@@ -416,7 +416,7 @@ export function createItemFrameWithItemTexture(itemUrl: string): THREE.CanvasTex
 
 // Block Materials
 export const blockMaterials = [
-  new THREE.MeshLambertMaterial({ color: 0x73b84a, map: loadBlockTexture(grassTopUrl), emissive: 0x14350d, emissiveIntensity: 0.04 }), // 0
+  new THREE.MeshLambertMaterial({ map: loadBlockTexture(grassTopUrl), emissive: 0x14350d, emissiveIntensity: 0.04 }), // 0
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(grassSideUrl), emissive: 0x14350d, emissiveIntensity: 0.02 }), // 1
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(dirtUrl) }), // 2
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(stoneUrl) }), // 3
@@ -459,7 +459,7 @@ export const blockMaterials = [
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(blackWoolUrl) }), // 40
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(basaltSideUrl) }), // 41
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(basaltTopUrl) }), // 42
-  new THREE.MeshLambertMaterial({ color: 0x7dbbff, map: loadBlockTexture(waterStillUrl), transparent: true, opacity: 0.72, depthWrite: false }), // 43
+  new THREE.MeshLambertMaterial({ color: 0x7dbbff, map: loadBlockTexture(waterStillUrl), transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true }), // 43: surface also visible from below
   new THREE.MeshLambertMaterial({ color: 0x74b94f, map: createGrassPlantTexture(), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 44
   new THREE.MeshLambertMaterial({ color: 0x4f9d4b, map: loadBlockTexture(fernUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 45
   new THREE.MeshLambertMaterial({ map: loadBlockTexture(deadBushUrl), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), // 46
@@ -570,7 +570,7 @@ export function materialIndexFor(type: BlockType, normal: THREE.Vector3) {
   if (type === 'wood' || type === 'oakLog') return Math.abs(normal.y) > 0 ? 5 : 4;
   if (type === 'leaves') return 6;
   if (type === 'sand') return 9;
-  if (type === 'gravel') return 10;
+  if (type === 'gravel' || type === 'riverPebbles') return 10;
   if (type === 'cobblestone') return 11;
   if (type === 'stoneBricks') return 12;
   if (type === 'planks' || type === 'oakPlanks') return 13;
@@ -743,6 +743,7 @@ export const blockLabels: Record<BlockType, string> = {
   flower: '花',
   sand: '沙子',
   gravel: '砂砾',
+  riverPebbles: '河滩卵石',
   cobblestone: '圆石',
   stoneBricks: '石砖',
   planks: '橡木板',
@@ -865,6 +866,7 @@ export const blockIconUrls: Record<BlockType, string> = {
   flower: cornflowerUrl,
   sand: sandUrl,
   gravel: gravelUrl,
+  riverPebbles: gravelUrl,
   cobblestone: cobblestoneUrl,
   stoneBricks: stoneBricksUrl,
   planks: oakPlanksUrl,

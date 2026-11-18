@@ -308,6 +308,7 @@ input:focus-visible {
   font-size: 11px;
   color: oklch(0.5 0.012 250);
 }
+.seed-copy { font: inherit; padding: 2px; color: var(--menu-ink); background: transparent; border: 0; text-decoration: underline dotted; cursor: pointer; }
 
 .world-select-actions {
   display: flex;

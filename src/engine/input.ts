@@ -24,6 +24,23 @@ export class Input {
   onCommand = (_code: string) => {};
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    this.bind(canvas);
+  }
+  /** A new canvas never inherits a pointer lock, touches or a pending jump. */
+  rebind(canvas: HTMLCanvasElement) {
+    if (this.disposed || this.canvas === canvas) return false;
+    this.abort.abort();
+    this.lockRevision++;
+    this.wantsControl = this.touch = false;
+    if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+    this.reset();
+    this.canvas = canvas;
+    this.abort = new AbortController();
+    this.bind(canvas);
+    this.onChange();
+    return true;
+  }
+  private bind(canvas: HTMLCanvasElement) {
     const signal = this.abort.signal;
     document.addEventListener(
       'pointerlockchange',
@@ -87,16 +104,18 @@ export class Input {
   async lock() {
     if (this.disposed) return;
     const revision = ++this.lockRevision;
+    const canvas = this.canvas;
     this.wantsControl = true;
     try {
-      await this.canvas.requestPointerLock();
+      await canvas.requestPointerLock();
       if (revision !== this.lockRevision || this.disposed) {
-        if (!this.wantsControl && document.pointerLockElement === this.canvas) document.exitPointerLock();
+        if ((canvas !== this.canvas || !this.wantsControl) && document.pointerLockElement === canvas) document.exitPointerLock();
         return;
       }
       this.onChange();
     } catch (error) {
-      if (revision === this.lockRevision) { this.wantsControl = false; this.onChange(); }
+      if (revision !== this.lockRevision || this.disposed) return;
+      this.wantsControl = false; this.onChange();
       throw error;
     }
   }
@@ -156,6 +175,7 @@ export class Input {
   }
   private reset() {
     this.keys.clear();
+    this.priorButtons = [];
     this.primary = this.secondary = false;
     this.touchX = this.touchZ = this.lookX = this.lookY = 0;
     this.jumpQueued = false;

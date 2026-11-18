@@ -11,6 +11,12 @@ export async function verifyTerrainWorker(assert: (condition: unknown, label: st
     stream = new ChunkStream(world, source);
   try {
     const signal = new AbortController().signal;
+    const old = new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1');
+    const oldSource = new TerrainWorkerSource(old);
+    try {
+      const oldChunk = await oldSource.generate(0, 0, signal);
+      assert(oldSource.mode === 'worker' && JSON.stringify([...oldChunk.cells]) === JSON.stringify([...old.generate(0,0).cells]), '读取旧世界时 Worker 保留原来的地形版本');
+    } finally { oldSource.dispose(); }
     const chunk = await source.generate(-1, 0, signal);
     assert(source.mode === 'worker', '浏览器实际运行独立地形 Worker（非回退）');
     assert(

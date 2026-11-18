@@ -43,7 +43,7 @@ function snapshot(canvas: HTMLCanvasElement, label: string) {
   return colors.size;
 }
 
-async function drawPair(world: World, renderer: Renderer, actual: Actual, label: string) {
+async function drawPair(world: World, renderer: Renderer, actual: Actual, label: string, afterAtlasDraw?: () => Promise<void>) {
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(72, width / height, .1, 220);
   scene.background = new THREE.Color(0xa8d4ee);
   scene.fog = new THREE.Fog(0xa8d4ee, 41, 82);
@@ -81,6 +81,7 @@ async function drawPair(world: World, renderer: Renderer, actual: Actual, label:
       const sampledColors = snapshot(renderer.domElement, `${label} · ${actual} · ${atlas ? '图集' : '原材质'}`);
       assert(drawCalls > 0 && visibleTriangles > 0 && submittedWater && submittedCutout, 'Missing draws for terrain, water or foliage');
       rows.push({ atlasCount: chunks.atlasCount, meshes, geometryTriangles, waterTriangles, cutoutTriangles, submittedWater, submittedCutout, drawCalls, visibleTriangles, sampledColors });
+      if (atlas) await afterAtlasDraw?.(); // Exercise loss while the last mesh set is still resident.
     } finally { chunks.dispose(); }
   }
   assert(rows[0].geometryTriangles === rows[1].geometryTriangles && rows[0].waterTriangles === rows[1].waterTriangles && rows[0].cutoutTriangles === rows[1].cutoutTriangles, 'Batching changed geometry');
@@ -114,13 +115,14 @@ async function candidate(world: World, requested: string) {
   let renderer: WebGPURenderer | undefined, gl: WebGL2RenderingContext | undefined;
   let initialized = false, phase = 'import', reason = '', detected: Actual | null = null;
   const firstFig = pictures.children.length;
+  let loss: { reason: string; journal: string; nativeTriangles: number; nativeCalls: number } | undefined;
   try {
     const { WebGPURenderer } = await import('three/webgpu');
     phase = 'init';
     // A canvas bound to 2D cannot create WebGL2. This exercises an actual init() rejection,
     // and makes reusing the attempted canvas for the stable fallback observably incorrect.
     if (requested === 'fail-init') assert(canvas.getContext('2d'), 'Cannot inject context mismatch');
-    renderer = new WebGPURenderer({ canvas, antialias: true, powerPreference: 'high-performance', forceWebGL: requested !== 'auto' });
+    renderer = new WebGPURenderer({ canvas, antialias: true, powerPreference: 'high-performance', forceWebGL: requested === 'force-webgl2' || requested === 'fail-init' });
     await renderer.init(); initialized = true;
     const backend = renderer.backend as typeof renderer.backend & { isWebGPUBackend?: boolean; isWebGLBackend?: boolean; device?: GPUDevice };
     detected = backend.isWebGPUBackend ? 'WebGPUBackend' : backend.isWebGLBackend ? 'WebGLBackend' : null;
@@ -133,11 +135,36 @@ async function candidate(world: World, requested: string) {
     renderer.onError = e => errors.push(typeof e === 'string' ? e : JSON.stringify(e));
     renderer.onDeviceLost = e => errors.push(`Device lost: ${e.message}`);
     phase = 'draw';
-    const rows = await drawPair(world, renderer, detected, '候选');
-    await backend.device?.queue.onSubmittedWorkDone(); await frame();
-    assert(!errors.length && (!gl || (!gl.isContextLost() && gl.getError() === gl.NO_ERROR)), errors.join('; ') || 'WebGL2 backend error');
-    return { actual: detected, adapter, reason: detected === 'WebGPUBackend' ? null : requested === 'force-webgl2' ? 'Forced by fixture: forceWebGL=true' : 'Three initialized its internal WebGL2 fallback instead of native WebGPU', rows };
+    if (requested === 'lose-device') {
+      if (detected !== 'WebGPUBackend') return { actual: detected, adapter, skipped: true, reason: '没有原生设备，未执行丢失恢复。', rows: [] };
+      const device = backend.device;
+      assert(device, 'Native backend did not expose its GPU device');
+      const journal = JSON.stringify(world.snapshot());
+      assert(world.snapshot().length > 0 && world.get(2, 7, 2)?.type === 'water', 'Expected edited pond');
+      const native = await drawPair(world, renderer, detected, '丢失前', async () => {
+        await device.queue.onSubmittedWorkDone();
+        assert(!errors.length, errors.join('; '));
+        // Three r187 suppresses onDeviceLost for intentional destruction. Use the
+        // platform's loss promise; never treat mere init/draw failure as recovery.
+        const lost = device.lost;
+        device.destroy();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const info = await Promise.race([lost, new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('GPUDevice.lost timed out')), 5000);
+          })]);
+          assert(info.reason === 'destroyed', `Unexpected loss reason: ${info.reason}`);
+        } finally { clearTimeout(timer); }
+      });
+      loss = { reason: 'destroyed', journal, nativeTriangles: native[1].geometryTriangles, nativeCalls: native[1].drawCalls };
+    } else {
+      const rows = await drawPair(world, renderer, detected, '候选');
+      await backend.device?.queue.onSubmittedWorkDone(); await frame();
+      assert(!errors.length && (!gl || (!gl.isContextLost() && gl.getError() === gl.NO_ERROR)), errors.join('; ') || 'WebGL2 backend error');
+      return { actual: detected, adapter, reason: detected === 'WebGPUBackend' ? null : requested === 'force-webgl2' ? 'Forced by fixture: forceWebGL=true' : 'Three initialized its internal WebGL2 fallback instead of native WebGPU', rows };
+    }
   } catch (e) {
+    if (requested === 'lose-device') throw e;
     reason = `${requested === 'fail-init' ? 'Injected 2D-bound canvas; ' : ''}${phase}: ${message(e)}`;
     while (pictures.children.length > firstFig) pictures.lastElementChild!.remove();
   } finally {
@@ -148,6 +175,13 @@ async function candidate(world: World, requested: string) {
       gl?.getExtension('WEBGL_lose_context')?.loseContext();
     }
   }
+  if (loss) {
+    const recovered = await stable(world, '设备丢失后', canvas);
+    assert(recovered.freshFallbackCanvas && recovered.rows[1].geometryTriangles === loss.nativeTriangles &&
+      world.get(2, 7, 2)?.type === 'water' && JSON.stringify(world.snapshot()) === loss.journal,
+      'Recovery changed geometry or the world edit journal');
+    return { ...recovered, lossReason: loss.reason, attemptedBackend: detected, nativeCalls: loss.nativeCalls, journalPreserved: true };
+  }
   return { ...await stable(world, '新画布回退', canvas), attemptedBackend: detected, reason };
 }
 
@@ -155,16 +189,16 @@ run.disabled = false; status.textContent = '就绪';
 run.onclick = async () => {
   run.disabled = mode.disabled = true; delete result.dataset.outcome;
   result.textContent = ''; pictures.replaceChildren(); status.textContent = '绘制中…';
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   try {
     prepare(world);
     const deadline = performance.now() + 20000;
     while (blockMaterials.some(m => !m.map?.image)) { assert(performance.now() < deadline, 'Source textures failed to load'); await frame(); }
     const control = await stable(world, '对照'), requested = mode.value, test = await candidate(world, requested);
-    assert(control.rows.every((r, i) => r.geometryTriangles === test.rows[i].geometryTriangles), 'Different geometry across backends');
-    const outcome = test.actual === 'WebGPUBackend' ? 'native' : 'fallback';
+    if (!('skipped' in test)) assert(control.rows.every((r, i) => r.geometryTriangles === test.rows[i].geometryTriangles), 'Different geometry across backends');
+    const outcome = 'skipped' in test ? 'skipped' : 'lossReason' in test ? 'recovered' : test.actual === 'WebGPUBackend' ? 'native' : 'fallback';
     result.textContent = JSON.stringify({ seed: 42, chunks: world.loadedCount, cells: world.blockCount, requested, outcome, control, candidate: test }, null, 2);
-    result.dataset.outcome = outcome; status.textContent = `完成 · ${test.actual}`;
+    result.dataset.outcome = outcome; status.textContent = `${outcome === 'skipped' ? '未执行设备丢失' : outcome === 'recovered' ? '已恢复' : '完成'} · ${test.actual}`;
   } catch (e) {
     result.textContent = message(e); result.dataset.outcome = 'error'; status.textContent = '验证失败';
   } finally { world.dispose(); run.disabled = mode.disabled = false; }

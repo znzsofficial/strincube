@@ -1,5 +1,5 @@
 import { isBlockType } from './blockTypes';
-import { GENERATOR } from './core/generator';
+import { supportsTerrain } from './core/generator';
 import { BOTTOM, CHUNK, TOP } from './core/voxel';
 import type { SaveSummary } from './persistence';
 import type { GameSettings, WorldSaveData } from './types';
@@ -197,7 +197,7 @@ export function validateWorldSave(value: unknown): asserts value is WorldSaveDat
   const save = record(value, 'world');
   requireField(save.version === 3, 'version', '不支持此存档格式');
   const engine = record(save.engineData, 'engineData');
-  requireField(engine.generator === GENERATOR, 'engineData.generator', '不支持此地形生成器版本');
+  requireField(supportsTerrain(engine.generator), 'engineData.generator', '不支持此地形生成器版本');
   fields(save, 'world', { name: text, savedAt: timestamp, seed: Number.isSafeInteger, timeOfDay: unit });
   worldGen(save.worldGen, 'worldGen');
   for (const [k, v] of Object.entries(record(save.settings, 'settings'))) {

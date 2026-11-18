@@ -12,7 +12,7 @@ const stats = (values: number[]) => {
   };
 };
 export async function terrainBenchmark() {
-  const generator = new TerrainGenerator(42, defaultWorldGenSettings);
+  const generator = new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1');
   const source = new TerrainWorkerSource(generator),
     world = new World(generator),
     simulation = new Simulation(world);

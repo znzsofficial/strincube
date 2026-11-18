@@ -9,7 +9,7 @@ const scope = globalThis as unknown as {
 let generator: TerrainGenerator | undefined;
 scope.onmessage = ({ data }) => {
   if (data.type === 'init') {
-    generator = new TerrainGenerator(data.seed, data.settings);
+    generator = new TerrainGenerator(data.seed, data.settings, data.version);
     return;
   }
   try {

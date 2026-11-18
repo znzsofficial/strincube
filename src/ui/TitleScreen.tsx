@@ -269,7 +269,10 @@ export function TitleScreen({
                        <strong>{meta.name}</strong>
                        {meta.id === importedId && <small className="backup-imported">刚导入的副本</small>}
                       <small>{new Date(meta.savedAt).toLocaleString()}</small>
-                      <small>{meta.worldModeLabel} · {meta.worldSeedLabel}</small>
+                      <small>{meta.worldModeLabel} · <button type="button" className="seed-copy" title="复制世界种子" aria-label={`复制世界种子 ${meta.seed}`} onClick={async () => {
+                        try { await navigator.clipboard.writeText(String(meta.seed)); setMessage(`已复制世界种子 ${meta.seed}`); }
+                        catch { setMessage(`可手动复制世界种子：${meta.seed}`); }
+                      }}>{meta.worldSeedLabel}</button></small>
                     </div>
                     <div className="world-select-actions">
                       <button type="button" className="world-play-btn" disabled={busy} onClick={() => onLoadGame(meta.id)}><iconify-icon icon="lucide:play" width="14"></iconify-icon> 进入世界</button>

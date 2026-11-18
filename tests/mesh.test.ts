@@ -135,7 +135,7 @@ test('snapshot guard rejects center edits, unloaded/replaced neighbors and previ
 });
 
 test('seed42 25-chunk deterministic fixture preserves 101482 triangles', () => {
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) world.ensure(x, z);
   let triangles = 0;
   for (const c of world.loaded) {

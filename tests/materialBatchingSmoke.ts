@@ -177,7 +177,7 @@ function failedCanvasContracts() {
     }
   }
 
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   const chunk: Chunk = { x: 0, z: 0, cells: new Map([
     [indexOf(0, 0, 0), { type: 'stone' }], [indexOf(2, 0, 0), { type: 'leaves' }],
   ]) };
@@ -207,7 +207,7 @@ export async function runMaterialBatchingSmoke() {
   materialContracts();
   await asynchronousContracts();
   failedCanvasContracts();
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) world.ensure(x, z);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x182331);

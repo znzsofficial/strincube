@@ -26,7 +26,7 @@ export class TerrainWorkerSource implements ChunkSource {
         this.fail(event.message || '地形 Worker 加载失败');
       };
       this.worker.onmessageerror = () => this.fail('地形 Worker 返回数据无法读取');
-      this.send({ type: 'init', seed: privateGenerator.seed, settings: privateGenerator.settings });
+      this.send({ type: 'init', seed: privateGenerator.seed, settings: privateGenerator.settings, version: privateGenerator.version });
     } catch (error) {
       this.fail(String(error));
     }

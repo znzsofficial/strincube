@@ -22,7 +22,7 @@ document.querySelector('#run')!.addEventListener('click', async () => {
   const output = document.querySelector('#result')!;
   output.textContent = '运行中';
   const settings = { ...defaultSettings(1), shadows: false, viewDistance: 82 };
-  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings));
+  const world = new World(new TerrainGenerator(42, defaultWorldGenSettings, 'terrain-v2.1'));
   const view = new GameScene(document.querySelector('#mount') as HTMLElement, settings);
   const meshes = new ChunkRenderer(world, view.scene, { materialBatching: false });
   let batched: ChunkRenderer | undefined;

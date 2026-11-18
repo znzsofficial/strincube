@@ -67,3 +67,36 @@ test('input pauses synchronously and a delayed browser acquisition cannot reacti
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow); else Reflect.deleteProperty(globalThis, 'window');
   }
 });
+
+test('replacing the canvas invalidates a pending lock and moves pointer handlers exactly once', async () => {
+  const doc = Object.assign(new EventTarget(), { pointerLockElement: null as unknown,
+    exitPointerLock() { this.pointerLockElement = null; } });
+  const oldDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const oldWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: doc });
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: new EventTarget() });
+  let acquire!: () => void;
+  const a = Object.assign(new EventTarget(), { requestPointerLock: () => new Promise<void>(r => { acquire = r; }) });
+  const b = Object.assign(new EventTarget(), { requestPointerLock: async () => { doc.pointerLockElement = b; } });
+  const input = new Input(a as unknown as HTMLCanvasElement);
+  try {
+    const pending = input.lock();
+    const newCanvas = b as unknown as HTMLCanvasElement;
+    input.primary = true; input.lookX = 10;
+    assert.ok(input.rebind(newCanvas)); assert.equal(input.rebind(newCanvas), false);
+    assert.equal(input.primary, false); assert.equal(input.lookX, 0);
+    doc.pointerLockElement = a; acquire(); await pending;
+    assert.equal(doc.pointerLockElement, null); assert.equal(input.active, false);
+    await input.lock();
+    for (const [canvas, cancelled] of [[a, false], [b, true]] as const) {
+      const event = new Event('contextmenu', { cancelable: true }); canvas.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, cancelled);
+    }
+    b.dispatchEvent(Object.assign(new Event('pointerdown'), { button: 0 }));
+    assert.equal(input.primary, true);
+  } finally {
+    input.dispose();
+    if (oldDocument) Object.defineProperty(globalThis, 'document', oldDocument); else Reflect.deleteProperty(globalThis, 'document');
+    if (oldWindow) Object.defineProperty(globalThis, 'window', oldWindow); else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
