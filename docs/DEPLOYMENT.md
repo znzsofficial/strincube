@@ -6,8 +6,21 @@ Cloudflare Pages project: `strincube`, production branch: `master`.
 
 - Production: https://strincube.pages.dev
 - Custom domain: https://game.nekolaska.vip
-- Current deployment: https://dde2dab5.strincube.pages.dev
-- Previous stable deployment: https://80162abe.strincube.pages.dev
+- Current deployment: https://8a4f83e4.strincube.pages.dev
+- Previous stable deployment: https://dde2dab5.strincube.pages.dev
+
+## 2026-11-18 — small-screen menus and touch HUD
+
+Application source: [`e2ecf7e`](https://github.com/znzsofficial/strincube/commit/e2ecf7e).
+The title screen and in-game menus scroll on short viewports. Touch players can
+swipe through the hotbar while keeping the inventory button in reach. This
+UI-only release uses the same saves and terrain generator as `dde2dab5`.
+
+96 Node tests, 107 browser assertions and the production build passed. Both
+production domains served `index-CqlxD500.js` and `index-DnsB57Yj.css`. On the
+live Pages site, Chromium with emulated touch created and entered a world,
+checked the HUD at 844×390, 568×320 and 320×568, and selected slot 9 by swiping
+before opening the inventory. Physical phone testing remains outstanding.
 
 ## 2026-11-18 — watershed worlds and building feedback
 

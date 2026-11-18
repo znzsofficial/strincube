@@ -12,7 +12,7 @@ StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and Type
 - [Deployment record](docs/DEPLOYMENT.md): production release and publishing procedure.
 - [Remaining work](docs/ROADMAP.md): prioritized tasks and acceptance criteria.
 
-The stable WebGL watershed release is deployed as `dde2dab5`. Its verification completed with
+The stable WebGL release with small-screen menu and touch HUD fixes is deployed as `8a4f83e4`. Its verification completed with
 96 Node tests, 107 browser assertions and a production build; see the deployment
 record for source-control status and online smoke-test results.
 

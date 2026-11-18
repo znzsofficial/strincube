@@ -1,6 +1,6 @@
 # Remaining work
 
-Planning baseline: stable WebGL watershed deployment `dde2dab5`, source `5b20ad5`.
+Planning baseline: stable WebGL deployment `8a4f83e4`, source `e2ecf7e`.
 This is the repository's handoff checklist; update it when acceptance is completed.
 Deployment authorization does not imply authorization to commit or push source.
 

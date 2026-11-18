@@ -72,6 +72,13 @@ Localhost, production and per-deployment URLs use separate browser storage.
 
 ## Last completed verification
 
+**Responsive menus and HUD (`8a4f83e4`):** For a regression check, expand the
+finite world's advanced settings in a short window and reach both the last
+setting and “创建并进入”. In play, use touch to swipe to slot 9, select it, open
+the bag, and reach the bottom action in the pause and settings panels. Check
+portrait (320×568) as well as landscape (568×320 and 844×390). See the
+[release record](DEPLOYMENT.md) for the checks run on production.
+
 **Watershed release `dde2dab5`:** 96 Node tests, 107 browser assertions and
 production build passed. Pebble DDA tests cover the top and side surface,
 pointing above the pile, picking through a gap and respecting reach. The live Pages
