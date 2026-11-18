@@ -1,9 +1,11 @@
 import type { PerspectiveCamera, Scene } from 'three';
 import type { PerformanceResources } from '../diagnostics';
-import type { GameSettings } from '../types';
+import type { GameSettings, RendererBackend } from '../types';
 
 /** The scene and camera outlive any renderer or canvas replacement. */
 export interface RuntimeView {
+  /** No active backend while a lost native device is being replaced. */
+  readonly rendererBackend: RendererBackend | undefined;
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
   readonly canvas: HTMLCanvasElement;

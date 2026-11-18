@@ -23,6 +23,8 @@ import { DesktopInventory } from './ui/DesktopInventory';
 import { DesktopPauseMenu } from './ui/DesktopPauseMenu';
 import { GameOverlays } from './ui/GameOverlays';
 import { Hotbar } from './ui/Hotbar';
+import { RendererChoice } from './ui/RendererChoice';
+import { readRendererPreference, storeRendererPreference, type RendererPreference } from './rendererPreference';
 import { LoadingScreen } from './ui/LoadingScreen';
 import { MobileInventory } from './ui/MobileInventory';
 import { MobilePauseMenu } from './ui/MobilePauseMenu';
@@ -68,6 +70,10 @@ function densityLabel(value: string | undefined) {
 
 export function App() {
   const isTouch = useTouchMode();
+  const [rendererPreference, setRendererPreference] = useState(readRendererPreference);
+  const rendererChoice = <RendererChoice value={rendererPreference} onChange={(value: RendererPreference) => {
+    setRendererPreference(value); storeRendererPreference(value);
+  }} />;
   const mountRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<BlockGameApi | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -329,6 +335,7 @@ export function App() {
           if (unlock) gameRef.current?.unlockControls();
         }, () => openOverlayPanel('model'), { 
           worldGen: effectiveWorldGen,
+          rendererPreference,
           initialSave: pendingSaveRef.current ?? undefined,
           signal: abort.signal,
           onError: error => {
@@ -642,6 +649,7 @@ export function App() {
       <>
       {gameError && <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>}
       <TitleScreen
+        rendererChoice={rendererChoice}
         densitySummary={densitySummary}
         finiteWorldRadius={finiteWorldRadius}
         saveMetaList={saveMetaList}
@@ -776,7 +784,7 @@ export function App() {
       )}
 
       {overlay === 'settings' && (
-        <SettingsPanel isMobile={isTouch} settings={settings} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} onUpdateSettings={updateSettings} />
+        <SettingsPanel isMobile={isTouch} settings={settings} rendererChoice={rendererChoice} actualBackend={snapshot.rendererBackend} fallback={snapshot.rendererFallback} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} onUpdateSettings={updateSettings} />
       )}
 
       {overlay === 'model' && selectedModel && (

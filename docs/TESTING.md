@@ -70,7 +70,15 @@ terrain visible and no runtime errors. After an authorized deployment, repeat on
 the production domain and verify the entry asset filenames match `dist/index.html`.
 Localhost, production and per-deployment URLs use separate browser storage.
 
-## Last completed verification
+## Current release checks (`c7d25129`)
+
+1. On the title screen, select **WebGPU（实验）**, reload and check that the choice persists. Enter a world on a supported browser. In **暂停 → 设置**, verify **当前使用：WebGPU** and confirm the canvas has a `webgpu` context. The saved preference alone is not evidence of native rendering.
+2. Repeat with the GPU API unavailable. World entry must succeed and settings must report **WebGL** with the fallback notice. Changing the preference in play must leave the current world running.
+3. Open `/atlas/`, click a location and wait for **样区就绪**. This is the public atlas; forced device loss and the generated MMD scene are separate development checks.
+
+These paths passed on the live Pages site in Edge. The release also passed 96 Node tests, 107 browser assertions and a production build. See [deployment history](DEPLOYMENT.md) for asset names and source state.
+
+## Regression scenarios and historical results
 
 **Responsive menus and HUD (`8a4f83e4`):** For a regression check, expand the
 finite world's advanced settings in a short window and reach both the last

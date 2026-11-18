@@ -4,6 +4,9 @@ import { AUTOSAVE_INTERVAL_MS } from '../saveCoordinator';
 import { matchingQualityPreset, qualityPreset, type QualityPreset } from '../engine/quality';
 
 interface SettingsPanelProps {
+  rendererChoice?: React.ReactNode;
+  actualBackend?: 'webgl' | 'webgpu';
+  fallback?: boolean;
   isMobile?: boolean;
   settings: GameSettings;
   onReturnToMenu: () => void;
@@ -11,11 +14,14 @@ interface SettingsPanelProps {
   onUpdateSettings: (patch: Partial<GameSettings>) => void;
 }
 
-export function SettingsPanel({ isMobile = false, settings, onReturnToMenu, onUpdateSetting, onUpdateSettings }: SettingsPanelProps) {
+export function SettingsPanel({ isMobile = false, settings, rendererChoice, actualBackend = 'webgl', fallback, onReturnToMenu, onUpdateSetting, onUpdateSettings }: SettingsPanelProps) {
   return (
     <section className={isMobile ? 'mobile-settings-panel settings-panel' : 'side-panel settings-panel'} aria-label="设置">
       <header><Settings size={18} aria-hidden="true" /> 设置</header>
       <div className="settings-panel-scroll">
+      {rendererChoice}
+      <p className="quality-hint" role="status">当前使用：{actualBackend === 'webgpu' ? 'WebGPU' : 'WebGL'}{fallback && '（WebGPU 不可用，已自动回退）'}。更改后，下次进入世界生效。</p>
+      {actualBackend === 'webgpu' && <p className="quality-hint">WebGPU 使用直接渲染，暂不支持阴影和后处理。复杂角色材质建议使用 WebGL。</p>}
       <label className="toggle-row"><input type="checkbox" aria-label="自动保存" checked={settings.autosave} onChange={event => onUpdateSetting('autosave', event.target.checked)} /> 自动保存 · 每 {AUTOSAVE_INTERVAL_MS / 1000} 秒</label>
       <p className="quality-hint">每个世界默认关闭。开关随世界保存；离开前可手动保存最新进度。</p>
       <label className="quality-preset"><Eye size={15} aria-hidden="true" /> 画质预设
@@ -38,8 +44,8 @@ export function SettingsPanel({ isMobile = false, settings, onReturnToMenu, onUp
       <label><Eye size={15} aria-hidden="true" /> 视距 <input type="range" min="32" max="120" step="2" value={settings.viewDistance} onChange={(event) => onUpdateSetting('viewDistance', Number(event.target.value))} /></label>
       <label><Box size={15} aria-hidden="true" /> 渲染倍率 <input type="range" min="0.75" max="2" step="0.05" value={settings.pixelRatio} onChange={(event) => onUpdateSetting('pixelRatio', Number(event.target.value))} /></label>
       <label><Cuboid size={15} aria-hidden="true" /> 模型亮度 <input type="range" min="0.35" max="1.25" step="0.05" value={settings.modelBrightness} onChange={(event) => onUpdateSetting('modelBrightness', Number(event.target.value))} /></label>
-      <label className="toggle-row"><input type="checkbox" checked={settings.shadows} onChange={(event) => onUpdateSetting('shadows', event.target.checked)} /> 阴影</label>
-      {settings.shadows && <div className="shadow-settings">
+      <label className="toggle-row"><input type="checkbox" disabled={actualBackend === 'webgpu'} checked={actualBackend === 'webgl' && settings.shadows} onChange={(event) => onUpdateSetting('shadows', event.target.checked)} /> 阴影</label>
+      {actualBackend === 'webgl' && settings.shadows && <div className="shadow-settings">
         <label>阴影分辨率
           <select aria-label="阴影分辨率" value={settings.shadowResolution} onChange={event => onUpdateSetting('shadowResolution', Number(event.target.value) as GameSettings['shadowResolution'])}>
             <option value="512">512 · 更省资源</option><option value="1024">1024 · 均衡</option><option value="2048">2048 · 更精细</option>
@@ -57,8 +63,8 @@ export function SettingsPanel({ isMobile = false, settings, onReturnToMenu, onUp
         <p className="quality-hint">场景未变化时跳过刷新；更高上限让移动阴影更流畅。</p>
       </div>}
       <label className="toggle-row"><input type="checkbox" checked={settings.showFps} onChange={(event) => onUpdateSetting('showFps', event.target.checked)} /> 显示帧数</label>
-      <label className="toggle-row"><input type="checkbox" checked={settings.postProcessing} disabled={settings.rendererBackend !== 'webgl'} onChange={(event) => onUpdateSetting('postProcessing', event.target.checked)} /> 后处理 FXAA/Bloom</label>
-      {settings.postProcessing && settings.rendererBackend === 'webgl' && (
+      <label className="toggle-row"><input type="checkbox" checked={actualBackend === 'webgl' && settings.postProcessing} disabled={actualBackend !== 'webgl'} onChange={(event) => onUpdateSetting('postProcessing', event.target.checked)} /> 后处理 FXAA/Bloom</label>
+      {settings.postProcessing && actualBackend === 'webgl' && (
         <div className="postprocess-panel">
           <label>Bloom 强度 <input type="range" min="0" max="0.55" step="0.01" value={settings.bloomStrength} onChange={(event) => onUpdateSetting('bloomStrength', Number(event.target.value))} /></label>
           <label className="toggle-row"><input type="checkbox" checked={settings.vignette} onChange={(event) => onUpdateSetting('vignette', event.target.checked)} /> 晕影效果 (Vignette)</label>

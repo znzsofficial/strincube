@@ -24,6 +24,21 @@ export type RuntimeOptions = BlockGameOptions & {
   viewFactory?: (mount: HTMLElement, settings: GameSettings, signal?: AbortSignal) => Promise<RuntimeView>;
 };
 
+async function createRuntimeView(mount: HTMLElement, settings: GameSettings, options: RuntimeOptions): Promise<RuntimeView> {
+  const { rendererPreference, viewFactory, signal } = options;
+  if (viewFactory) return viewFactory(mount, settings, signal);
+  if (rendererPreference === 'webgpu' && navigator.gpu) {
+    try {
+      const { createExperimentalView } = await import('./render/experimentalWebgpuView');
+      return await createExperimentalView(mount, settings, signal);
+    } catch (error) {
+      signal?.throwIfAborted();
+      console.warn('Native WebGPU initialization failed; using WebGL.', error);
+    }
+  }
+  return new GameScene(mount, settings);
+}
+
 export async function createGame(
   mount: HTMLElement,
   onSnapshot: (s: GameSnapshot) => void,
@@ -74,6 +89,7 @@ export async function createGame(
   );
   selectionBox.dispose();
   let target: VoxelHit | null = null;
+  let preferredBackend = options.rendererPreference ?? 'webgl';
   const emit = () => {
     if (disposed || !models || !input) return;
     const p = player.state,
@@ -82,6 +98,8 @@ export async function createGame(
     const perf = settings.showFps ? diagnostics.snapshot() : undefined;
     if (perf && meshes) perf.meshExecution = { mode: meshes.mode, fallback: meshes.fallback };
     onSnapshot({
+      rendererBackend: view?.rendererBackend,
+      rendererFallback: preferredBackend === 'webgpu' && view?.rendererBackend === 'webgl',
       selectedBlock,
       blockCount: world.blockCount,
       timeOfDay: session.timeOfDay,
@@ -147,7 +165,8 @@ export async function createGame(
       options.signal,
     );
     options.signal?.throwIfAborted();
-    view = options.viewFactory ? await options.viewFactory(mount, settings, options.signal) : new GameScene(mount, settings);
+    view = await createRuntimeView(mount, settings, options);
+    if (options.viewFactory && !options.rendererPreference && view.rendererBackend) preferredBackend = view.rendererBackend;
     options.signal?.throwIfAborted();
     meshes = new ChunkRenderer(world, view.scene);
     meshes.updateShadows(settings.shadows);

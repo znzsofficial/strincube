@@ -345,6 +345,8 @@ input:focus-visible {
 .world-backup-tools { display: grid; justify-items: center; gap: 6px; margin-top: 12px; font-size: 13px; }
 .world-backup-tools [role='status'] { max-width: 100%; overflow-wrap: anywhere; }
 .world-backup-tools a { color: var(--menu-accent); }
+.renderer-choice, .settings-panel .renderer-choice { display: flex; align-items: center; justify-content: space-between; gap: 1em; color: var(--menu-ink); }
+.renderer-choice select { font: inherit; color: var(--menu-ink); background: var(--menu-bg-2); border: 1px solid var(--menu-muted); border-radius: 5px; padding: .45em; }
 .storage-capacity { max-width: 32em; font-size: 0.8125rem; }
 .storage-capacity summary { cursor: pointer; padding: 0.5em; }
 .storage-capacity p { margin: 0.3em 0; font-variant-numeric: tabular-nums; }

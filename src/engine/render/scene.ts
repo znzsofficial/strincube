@@ -15,6 +15,7 @@ export type ShadowDiagnostics = Readonly<{
 }>;
 
 export class GameScene implements RuntimeView {
+  readonly rendererBackend = 'webgl';
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   private currentRenderer: THREE.WebGLRenderer;

@@ -186,7 +186,11 @@ export type StoredModel = ImportedModelItem & {
 
 // ──── Snapshot ────
 
+export type RendererBackend = 'webgl' | 'webgpu';
+
 export type GameSnapshot = {
+  rendererBackend?: RendererBackend;
+  rendererFallback?: boolean;
   performance?: import('./diagnostics').PerformanceSnapshot;
   selectedBlock: BlockType;
   blockCount: number;
@@ -245,6 +249,7 @@ export type WorldSaveData = {
 // ──── Options / API ────
 
 export type BlockGameOptions = {
+  rendererPreference?: RendererBackend;
   onError?: (error: Error) => void;
   worldGen?: WorldGenSettings;
   onProgress?: (label: string, progress: number) => void;

@@ -1,0 +1,4 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>地形地图 · StrinCube</title>
+<style>body{font:1rem/1.5 system-ui;background:#182322;color:#e8eee3;max-width:54rem;margin:1rem auto;padding:0 1rem}a{color:#c8df87}section{display:flex;gap:1rem;flex-wrap:wrap}figure{margin:0;flex:1 1 16rem}canvas{display:block;width:100%;image-rendering:pixelated}button,input{font:inherit}#field{width:100%;height:min(65dvh,30rem)}button{margin:.5rem .5rem .5rem 0}</style></head>
+<body><a href="/">← 返回游戏</a><h1>地形地图</h1><label>世界种子 <input id="seed" type="number" value="42"></label> <button id="map">更新地图</button><p>两张地图使用相同种子和坐标。蓝色是水域，高程每四格变色。点击地图预览该位置；使用键盘和鼠标可进入样区行走。样区不会写入存档。</p><section id="maps"></section><p id="status" role="status"></p><button id="lock" disabled>进入行走 · WASD / 空格</button><div id="field"></div><script type="module" src="./map.ts"></script></body></html>

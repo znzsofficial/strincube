@@ -5,6 +5,10 @@ Documentation map: `docs/ENGINE.md` owns runtime design, `docs/TESTING.md` verif
 `docs/ROADMAP.md` unfinished work. Keep completed features out of roadmap backlog
 and label release-specific counts/timings with their measurement context.
 
+Give usable player features an entry in the game or title menu. For an experimental
+renderer, label its limits, show which backend actually runs, and provide a stable
+fallback. Keep destructive device-loss checks and benchmarks in development fixtures.
+
 `src/engine/runtime.ts` is the only game entry (`createGame`). The user explicitly
 does not require legacy engine/save compatibility. Do not restore a v2 runtime,
 localStorage save adapter or migration branch. Existing browser data is not erased

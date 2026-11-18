@@ -143,8 +143,11 @@ are not reconstructed. A canvas replacement clears held input and obsolete lock
 requests before the next simulation step. A terminal display failure stops RAF
 updates and reports an error while the runtime save API remains available.
 
-The runtime uses WebGL with optional FXAA, bloom, vignette, grain and scanlines.
-There is no WebGPU renderer selection. The MMD format/runtime adapter uses 0.8.6.
+The default WebGL backend supports FXAA, bloom, vignette, grain and scanlines.
+Players can opt into the lazy-loaded native WebGPU direct pass on the title screen
+or select it for the next world entry from settings. Backend preference is local
+to the browser origin, independent of world saves; snapshots report the actual
+backend and fallback. The MMD format/runtime adapter uses 0.8.6.
 Real PMX/VMD assets still need a visual compatibility check; the browser regression
 suite covers GLTF persistence and a generated PMD plus VMD loader/runtime smoke test.
 

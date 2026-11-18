@@ -12,9 +12,12 @@ StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and Type
 - [Deployment record](docs/DEPLOYMENT.md): production release and publishing procedure.
 - [Remaining work](docs/ROADMAP.md): prioritized tasks and acceptance criteria.
 
-The stable WebGL release with small-screen menu and touch HUD fixes is deployed as `8a4f83e4`. Its verification completed with
-96 Node tests, 107 browser assertions and a production build; see the deployment
-record for source-control status and online smoke-test results.
+## Try it in the game
+
+- **WebGPU:** On the title screen, below **创建新世界**, choose **渲染后端 → WebGPU（实验）**, then create or load a world. **暂停 → 设置** shows the backend actually in use, including WebGL fallback. Changes made there apply the next time you enter a world. For shadows, postprocessing or complex MMD character materials, use WebGL (the default).
+- **[Seed atlas](https://strincube.pages.dev/atlas/):** Open **地形地图** from the title screen. Enter a seed to compare the old river valleys and the current watershed. Click either map to preview that location; use a keyboard and mouse to walk it. The preview does not write a save.
+
+See the [deployment record](docs/DEPLOYMENT.md) for the live build, source state and release checks.
 
 ## Current Highlights
 

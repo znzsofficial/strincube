@@ -1,8 +1,8 @@
-// Only imported by the experimental entry. The game runtime depends on RuntimeView instead.
+// Loaded on demand when native WebGPU is requested.
 import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { PerformanceResources } from '../diagnostics';
-import type { GameSettings } from '../types';
+import type { GameSettings, RendererBackend } from '../types';
 import type { RuntimeView } from './runtimeView';
 import { GameScene } from './scene';
 import { lightCycle, waterAtmosphere } from './daylight';
@@ -70,7 +70,8 @@ export class ExperimentalWebgpuView implements RuntimeView {
   private ratio = 0;
 
   get canvas() { return this.stable?.canvas ?? this.nativeCanvas; }
-  get backend() { return this.stable ? 'WebGLRenderer' : this.native ? 'WebGPUBackend' : null; }
+  get rendererBackend(): RendererBackend | undefined { return this.stable?.rendererBackend ?? (this.native ? 'webgpu' : undefined); }
+  get backend() { return this.rendererBackend === 'webgl' ? 'WebGLRenderer' : this.rendererBackend === 'webgpu' ? 'WebGPUBackend' : null; }
   get contextLost() { return !!this.failure || (this.stable?.contextLost ?? !this.native); }
   get error() { return this.failure; }
   get lossReason() { return this.reason; }

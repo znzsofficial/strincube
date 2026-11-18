@@ -8,6 +8,7 @@ import { StorageCapacity } from './StorageCapacity';
 type WorldMode = 'infinite' | 'finite' | 'flat';
 
 interface TitleScreenProps {
+  rendererChoice?: React.ReactNode;
   densitySummary: string;
   finiteWorldRadius: number;
   saveMetaList: SaveMeta[];
@@ -33,6 +34,7 @@ function formatUiNumber(value: number, digits = 1) {
 }
 
 export function TitleScreen({
+  rendererChoice,
   densitySummary,
   finiteWorldRadius,
   saveMetaList,
@@ -289,6 +291,8 @@ export function TitleScreen({
               <iconify-icon icon="lucide:plus" width="18"></iconify-icon> 创建新世界
             </button>
             <div className="world-backup-tools">
+              {rendererChoice}
+              <a href="/atlas/">地形地图 · 查看种子与河谷样区</a>
               <input ref={fileInput} type="file" hidden accept=".strincube" aria-label="选择世界备份文件" onChange={event => {
                 const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
                 if (file) void transfer({ file });

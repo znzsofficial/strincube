@@ -6,8 +6,19 @@ Cloudflare Pages project: `strincube`, production branch: `master`.
 
 - Production: https://strincube.pages.dev
 - Custom domain: https://game.nekolaska.vip
-- Current deployment: https://8a4f83e4.strincube.pages.dev
-- Previous stable deployment: https://dde2dab5.strincube.pages.dev
+- Current deployment: https://c7d25129.strincube.pages.dev
+- Previous stable deployment: https://8a4f83e4.strincube.pages.dev
+
+## 2026-11-18 — opt-in WebGPU and walkable atlas
+
+Direct upload from the working tree based on `d69e3fb`. That commit identifies the
+previous revision, not the exact source of this deployment. Production Edge checks on
+the Pages domain selected native WebGPU, entered a world, and confirmed the canvas
+and settings reported the same backend. With the GPU API unavailable, startup used
+WebGL and the panel reported the fallback. Selecting a different preference during
+play did not restart the world. The public `/atlas/` opened a walkable sample.
+The custom domain served `index-BmhWF7X6.js` and `index-JA5BDGq1.css`.
+96 Node tests, 107 browser assertions and the production build passed.
 
 ## 2026-11-18 — small-screen menus and touch HUD
 
