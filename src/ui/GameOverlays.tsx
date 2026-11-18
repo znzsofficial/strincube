@@ -1,5 +1,5 @@
 import { Moon, MousePointer2, Sun } from 'lucide-react';
-import type { GameSnapshot } from '../game/blockGame';
+import type { GameSnapshot } from '../engine/types';
 
 function formatUiNumber(value: number, digits = 1) {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits);
@@ -28,6 +28,9 @@ export function GameOverlays({
   onEnterTouchFullscreen,
   onRespawn,
 }: GameOverlaysProps) {
+  const performance = snapshot.performance;
+  const milliseconds = (value: number | null) => value === null ? '—' : value.toFixed(1);
+  const count = (value: number | undefined) => value === undefined ? '—' : value.toLocaleString('zh-CN');
   return (
     <>
       {snapshot.contextLost && (
@@ -41,14 +44,14 @@ export function GameOverlays({
         </div>
       )}
 
-      {showClickPrompt && !snapshot.isDead && (
+      {showClickPrompt && !snapshot.isLocked && !snapshot.isDead && (
         <div className="click-prompt" onClick={onClickToLock} onPointerDown={(event) => event.stopPropagation()}>
           <MousePointer2 size={28} aria-hidden="true" />
           <p>点击画面继续</p>
         </div>
       )}
 
-      {showTouchFullscreenPrompt && !snapshot.isDead && (
+      {showTouchFullscreenPrompt && !snapshot.isLocked && !snapshot.isDead && (
         <div className="click-prompt touch-fullscreen-prompt" onClick={onEnterTouchFullscreen} onPointerDown={(event) => event.stopPropagation()}>
           <MousePointer2 size={28} aria-hidden="true" />
           <p>点击进入全屏</p>
@@ -70,9 +73,26 @@ export function GameOverlays({
         <span>{isNight ? <Moon size={16} aria-hidden="true" /> : <Sun size={16} aria-hidden="true" />} {isNight ? '梦蓝夜晚' : '晴朗白天'}</span>
       </section>
 
-      {showFps && snapshot.fps !== undefined && (
-        <section className="hud top-left fps-hud" aria-label="帧数">
-          <span>{snapshot.fps} FPS</span>
+      {showFps && (snapshot.fps !== undefined || performance) && (
+        <section className="hud top-left fps-hud" aria-label="性能诊断">
+          <span>{performance ? (performance.fps === null ? '—' : Math.round(performance.fps)) : snapshot.fps} FPS</span>
+          {performance && (
+            <>
+              <span title={`最近 ${performance.frame.samples} 个有效帧；原始帧间隔，不是 GPU 耗时`}>帧间隔 {milliseconds(performance.frame.meanMs)} · P95 {milliseconds(performance.frame.p95Ms)} ms</span>
+              <span title="主线程平均耗时；渲染是 CPU 提交时间，不是 GPU 执行时间">CPU {milliseconds(performance.cpu.total.meanMs)} · 渲染提交 {milliseconds(performance.cpu.renderSubmission.meanMs)} ms</span>
+              <span>模拟 {milliseconds(performance.cpu.simulation.meanMs)} · 模型 {milliseconds(performance.cpu.models.meanMs)} ms</span>
+              <span>流式 {milliseconds(performance.cpu.streaming.meanMs)} · 网格主线程 {milliseconds(performance.cpu.meshMain.meanMs)} ms</span>
+              <span title="图集是已启用的地形材质批次；阴影刷新为最近有效帧的实际次数">地形图集 {count(performance.resources.terrainAtlases)} · 阴影刷新 {count(performance.resources.shadowUpdates)}</span>
+              {performance.meshExecution?.mode === 'main-thread-fallback'
+                ? <span title={performance.meshExecution.fallback}>网格已回退主线程</span>
+                : performance.meshWorker.samples > 0 && <span title="最近完成的网格任务；Worker 计算耗时，独立于主线程 CPU">网格 Worker {milliseconds(performance.meshWorker.meanMs)} ms / 任务</span>}
+              <span>绘制 {count(performance.resources.drawCalls)} · 三角形 {count(performance.resources.triangles)}</span>
+              <span title="对象数量，不代表显存字节数">几何体 {count(performance.resources.geometries)} · 纹理 {count(performance.resources.textures)} · 程序 {count(performance.resources.programs)}</span>
+              <span>区块 {count(performance.resources.residentChunks)} · 网格 {count(performance.resources.renderedChunks)}</span>
+              <span>队列 地形 {count(performance.resources.terrainQueueDepth)} · 网格 {count(performance.resources.meshQueueDepth)}</span>
+              {(performance.hidden || performance.skippedHiddenFrames > 0) && <span>{performance.hidden ? '后台采样暂停 · ' : ''}已略过 {performance.skippedHiddenFrames} 个后台帧</span>}
+            </>
+          )}
           {snapshot.worldDebug && (
             <>
               <span>{snapshot.worldDebug.biome} <small>({snapshot.worldDebug.baseBiome})</small></span>

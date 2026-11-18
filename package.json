@@ -6,23 +6,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import ./tests/register.mjs --test tests/*.test.ts"
   },
   "devDependencies": {
-    "@types/pako": "^2.0.4",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.185.1",
-    "@vitejs/plugin-react": "^6.0.3",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.4"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
   },
   "dependencies": {
-    "@yohawing/three-mmd-loader": "^0.6.0",
-    "lucide-react": "^1.24.0",
-    "pako": "^3.0.1",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "three": "^0.185.1"
+    "@yohawing/three-mmd-loader": "^0.8.6",
+    "lucide-react": "^1.74.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
   }
 }

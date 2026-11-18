@@ -1,5 +1,5 @@
 import { UserRound } from 'lucide-react';
-import type { ModelPartSettings, PlacedModelSettings } from '../game/blockGame';
+import type { ModelPartSettings, PlacedModelSettings } from '../engine/types';
 
 function formatUiNumber(value: number, digits = 1) {
   return Number.isInteger(value) ? `${value}` : value.toFixed(digits);

@@ -1,8 +1,8 @@
 import { UserRound } from 'lucide-react';
 import type React from 'react';
-import type { BlockType } from '../game/blocks';
-import { blockIconTints, blockIconUrls, blockLabels } from '../game/blocks';
-import type { ImportedModelItem } from '../game/blockGame';
+import type { BlockType } from '../engine/blocks';
+import { blockIconTints, blockIconUrls, blockLabels } from '../engine/blocks';
+import type { ImportedModelItem } from '../engine/types';
 
 export type InventoryItem = { type: 'block'; block: BlockType } | { type: 'model'; model: ImportedModelItem };
 

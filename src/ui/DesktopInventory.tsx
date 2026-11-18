@@ -1,6 +1,6 @@
 import { Package, UserRound } from 'lucide-react';
-import type { ImportedModelItem, ModelImportProgress } from '../game/blockGame';
-import { blockLabels, type BlockType } from '../game/blocks';
+import type { ImportedModelItem, ModelImportProgress } from '../engine/types';
+import { blockLabels, type BlockType } from '../engine/blocks';
 import {
   blockItems,
   inventoryItemIcon,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { createGame } from './engine/runtime';
+import { ControlStateMachine } from './ui/controlState';
 import {
-  createBlockGame,
-  setWorldSeed,
   type BlockGameApi,
   type GameSettings,
   type GameSnapshot,
@@ -13,10 +13,10 @@ import {
   type WorldSaveData,
   defaultWorldGenSettings,
   getWorldRadius,
-} from './game/blockGame';
+} from './engine/types';
 import {
   type BlockType,
-} from './game/blocks';
+} from './engine/blocks';
 import { useTouchMode } from './mobile/useTouchMode';
 import { TouchControls } from './mobile/TouchControls';
 import { DesktopInventory } from './ui/DesktopInventory';
@@ -28,8 +28,9 @@ import { MobileInventory } from './ui/MobileInventory';
 import { MobilePauseMenu } from './ui/MobilePauseMenu';
 import { ModelPanel } from './ui/ModelPanel';
 import { SettingsPanel } from './ui/SettingsPanel';
+import { defaultSettings } from './engine/core/session';
 import { TitleScreen } from './ui/TitleScreen';
-import { deleteSaveData, getSaveMetaList, loadSaveData, storeSaveData } from './saveStorage';
+import { deleteSaveData, getSaveMetaList, loadSaveData, storeSaveData, type SaveMeta } from './saveStorage';
 import {
   initialHotbarItems,
   inventoryItemLabel,
@@ -69,49 +70,38 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const vmdInputRef = useRef<HTMLInputElement | null>(null);
-  const lockIntentRef = useRef(false);
+  const controlsRef = useRef(new ControlStateMachine());
+  const runtimeEpoch = useRef(0);
+  const touchModeRef = useRef(isTouch);
+  touchModeRef.current = isTouch;
   const overlayRef = useRef<Overlay>('menu');
   const activeSlotRef = useRef(0);
   const hotbarItemsRef = useRef<InventoryItem[]>(initialHotbarItems);
   const isLockedRef = useRef(false);
-  const clickPromptRef = useRef(false);
-  const [showClickPrompt, setShowClickPrompt] = useState(false);
-  const [showTouchFullscreenPrompt, setShowTouchFullscreenPrompt] = useState(false);
+  const [controlState, setControlState] = useState(controlsRef.current.state);
+  const showClickPrompt = !isTouch && (controlState.mode === 'ready' || controlState.mode === 'requesting');
+  const showTouchFullscreenPrompt = isTouch && (controlState.mode === 'ready' || controlState.mode === 'requesting');
   const [screen, setScreen] = useState<GameScreen>('title');
   const [loadingProgress, setLoadingProgress] = useState({ label: '准备中', progress: 0 });
-  const [overlay, setOverlay] = useState<Overlay>('menu');
+  const overlay = controlState.mode === 'panel' ? controlState.panel : null;
   const [importStatus, setImportStatus] = useState('支持 .glb / .gltf / .pmx / .pmd');
   const [activeSlot, setActiveSlot] = useState(0);
   const [hotbarItems, setHotbarItems] = useState<InventoryItem[]>(initialHotbarItems);
   const [modelItems, setModelItems] = useState<ImportedModelItem[]>([]);
   const [importProgress, setImportProgress] = useState<ModelImportProgress | null>(null);
-  const [rendererBackend, setRendererBackend] = useState<GameSettings['rendererBackend']>('webgl');
-  const [settings, setSettings] = useState<GameSettings>({
-    mouseSensitivity: 1,
-    moveSpeed: 5.4,
-    gamepadLookSensitivity: 1,
-    daySpeed: 0.004,
-    pixelRatio: Math.min(window.devicePixelRatio, 1),
-    shadows: true,
-    viewDistance: 82,
-    modelBrightness: 0.78,
-    breakSpeed: 1,
-    showFps: false,
-    timeOfDay: 0.28,
-    infiniteWaterSpread: false,
-    rendererBackend: 'webgl',
-    postProcessing: false,
-    bloomStrength: 0.18,
-    vignette: false,
-    vignetteDarkness: 1.0,
-    filmGrain: false,
-    filmNoise: 0.15,
-    filmScanlines: 0.05,
-  });
+  const [settings, setSettings] = useState<GameSettings>(() => defaultSettings(Math.min(window.devicePixelRatio, 1)));
   const [worldGenSettings, setWorldGenSettings] = useState<WorldGenSettings>(defaultWorldGenSettings);
   const [showWorldSettings, setShowWorldSettings] = useState(false);
   const [showAdvancedWorldSettings, setShowAdvancedWorldSettings] = useState(false);
-  const [saveMetaList, setSaveMetaList] = useState(getSaveMetaList);
+  const [saveMetaList, setSaveMetaList] = useState<SaveMeta[]>([]);
+  const [gameError, setGameError] = useState('');
+  const savingRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    getSaveMetaList().then(list => { if (!cancelled) setSaveMetaList(list); }).catch(error => { if (!cancelled) setGameError(`无法读取存档：${String(error)}`); });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => () => { runtimeEpoch.current++; gameRef.current?.dispose(); gameRef.current = null; }, []);
   const [saveStatus, setSaveStatus] = useState('');
   const [snapshot, setSnapshot] = useState<GameSnapshot>({
     selectedBlock: 'grass',
@@ -125,76 +115,71 @@ export function App() {
   });
 
   function setOverlayState(nextOverlay: Overlay) {
-    overlayRef.current = nextOverlay;
-    setOverlay(nextOverlay);
+    if (nextOverlay) controlsRef.current.open(nextOverlay);
+    else controlsRef.current.ready();
+    publishControlState();
+  }
+
+  function publishControlState() {
+    overlayRef.current = controlsRef.current.panel;
+    const next = controlsRef.current.state;
+    setControlState(previous => previous.mode === next.mode &&
+      (previous.mode !== 'panel' || (next.mode === 'panel' && previous.panel === next.panel)) ? previous : { ...next });
   }
 
   function openFilePicker(input: HTMLInputElement | null) {
     if (!input) return;
-    lockIntentRef.current = false;
     setOverlayState('file');
+    const revision = controlsRef.current.revision;
+    const epoch = runtimeEpoch.current;
     gameRef.current?.unlockControls();
     input.click();
 
     window.addEventListener('focus', () => {
       window.setTimeout(() => {
-        if (overlayRef.current === 'file') setOverlayState('menu');
+        if (epoch === runtimeEpoch.current && revision === controlsRef.current.revision && overlayRef.current === 'file') setOverlayState('menu');
       }, 250);
     }, { once: true });
   }
 
   function requestGameLock() {
-    lockIntentRef.current = true;
+    const game = gameRef.current;
+    if (!game || controlsRef.current.state.mode === 'requesting') return;
+    const revision = controlsRef.current.request();
+    publishControlState();
+    const failed = () => {
+      if (gameRef.current !== game) return;
+      controlsRef.current.failed(revision);
+      publishControlState();
+    };
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     try {
-      const lockRequest = gameRef.current?.lockControls();
-      void Promise.resolve(lockRequest).catch(() => {
-        lockIntentRef.current = false;
-        setOverlayState('menu');
-      });
+      if (touchModeRef.current) game.touchLock();
+      else void Promise.resolve(game.lockControls()).catch(failed);
     } catch {
-      lockIntentRef.current = false;
-      setOverlayState('menu');
+      failed();
     }
   }
 
   function canvasClickToLock() {
-    if (isTouch) {
-      gameRef.current?.touchLock();
-      setShowTouchFullscreenPrompt(false);
-    } else {
-      requestGameLock();
-    }
+    requestGameLock();
   }
 
   function enterTouchFullscreen() {
-    lockIntentRef.current = true;
-    clickPromptRef.current = false;
-    setShowClickPrompt(false);
-    setShowTouchFullscreenPrompt(false);
-    setOverlayState(null);
-    gameRef.current?.touchLock();
+    requestGameLock();
   }
 
   function openOverlayPanel(nextOverlay: Exclude<Overlay, null>) {
-    lockIntentRef.current = false;
     setOverlayState(nextOverlay);
     gameRef.current?.unlockControls();
   }
 
   function returnToMenu() {
-    lockIntentRef.current = false;
-    setOverlayState('menu');
+    openOverlayPanel('menu');
   }
 
   function closeOverlayAndResume() {
-    lockIntentRef.current = true;
-    clickPromptRef.current = false;
-    setShowClickPrompt(false);
-    setShowTouchFullscreenPrompt(false);
-    setOverlayState(null);
-    if (isTouch) gameRef.current?.touchLock();
-    else requestGameLock();
+    requestGameLock();
   }
 
   function startNewWorld() {
@@ -202,6 +187,12 @@ export function App() {
   }
 
   function confirmStartNewWorld() {
+    setGameError('');
+    hotbarItemsRef.current = initialHotbarItems;
+    setHotbarItems(initialHotbarItems);
+    activeSlotRef.current = 0;
+    setActiveSlot(0);
+    setModelItems([]);
     loadingRequestRef.current = { type: 'new' };
     pendingSaveRef.current = null;
     currentSaveIdRef.current = null;
@@ -212,38 +203,56 @@ export function App() {
     setLoadingProgress({ label: mode === 'finite' ? `准备创建世界 · 半径 ${r} 格` : '准备创建世界 · 区块生成', progress: 0 });
   }
 
-  function saveGame() {
+  async function saveGame() {
     const game = gameRef.current;
-    if (!game) return;
-    const now = new Date();
-    const id = currentSaveIdRef.current ?? `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const existing = currentSaveIdRef.current ? loadSaveData(id) : null;
-    const name = existing?.name ?? `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const data = game.save(name);
-    data.hotbar = hotbarItemsRef.current.map(item =>
-      item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', modelId: item.model.id }
-    );
-    data.activeSlot = activeSlotRef.current;
-    storeSaveData(id, data);
-    currentSaveIdRef.current = id;
-    setSaveMetaList(getSaveMetaList());
-    setSaveStatus('已保存');
-    window.setTimeout(() => setSaveStatus(''), 2000);
+    if (!game || savingRef.current) return;
+    savingRef.current = true;
+    setSaveStatus('保存中…');
+    try {
+      const now = new Date();
+      const data = game.save('');
+      const id = currentSaveIdRef.current ?? `next_${crypto.randomUUID()}`;
+      const name = saveMetaList.find(meta => meta.id === id)?.name ?? `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+      data.name = name;
+      data.hotbar = hotbarItemsRef.current.map(item =>
+        item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', modelId: item.model.id }
+      );
+      data.activeSlot = activeSlotRef.current;
+      await storeSaveData(id, data);
+      if (gameRef.current !== game) return;
+      currentSaveIdRef.current = id;
+      try {
+        const list = await getSaveMetaList();
+        if (gameRef.current !== game) return;
+        setSaveMetaList(list);
+      } catch {
+        if (gameRef.current === game) setSaveStatus('世界已保存，存档列表刷新失败。');
+        return;
+      }
+      setSaveStatus('已保存');
+      window.setTimeout(() => { if (gameRef.current === game) setSaveStatus(s => s === '已保存' ? '' : s); }, 2000);
+    } catch (error) {
+      if (gameRef.current !== game) return;
+      setSaveStatus('保存失败');
+      setGameError(`保存失败，请保留当前页面并重试：${error instanceof Error ? error.message : String(error)}`);
+    } finally { savingRef.current = false; }
   }
 
   function loadGameFromId(id: string) {
+    setGameError('');
     loadingRequestRef.current = { type: 'save', id };
     currentSaveIdRef.current = id;
     setScreen('loading');
     setLoadingProgress({ label: '加载存档 · 读取数据', progress: 0 });
   }
 
-  function deleteSave(id: string) {
-    deleteSaveData(id);
-    setSaveMetaList(getSaveMetaList());
+  async function deleteSave(id: string) {
+    try { await deleteSaveData(id); setSaveMetaList(await getSaveMetaList()); }
+    catch (error) { setGameError(`删除失败：${String(error)}`); }
   }
 
   function returnToTitle() {
+    runtimeEpoch.current++;
     if (gameRef.current) {
       gameRef.current.dispose();
       gameRef.current = null;
@@ -251,8 +260,9 @@ export function App() {
     pendingSaveRef.current = null;
     loadingRequestRef.current = null;
     currentSaveIdRef.current = null;
-    setShowTouchFullscreenPrompt(false);
-    setSaveMetaList(getSaveMetaList());
+    setOverlayState('menu');
+    isLockedRef.current = false;
+    void getSaveMetaList().then(setSaveMetaList).catch(error => setGameError(`无法读取存档：${String(error)}`));
     setScreen('title');
   }
 
@@ -263,6 +273,8 @@ export function App() {
   useEffect(() => {
     if (screen !== 'loading' || !mountRef.current) return;
     let cancelled = false;
+    const epoch = ++runtimeEpoch.current;
+    const abort = new AbortController();
 
     async function runLoading() {
       await waitForNextPaint();
@@ -271,52 +283,43 @@ export function App() {
       const loadingRequest = loadingRequestRef.current ?? { type: 'new' as const };
       let effectiveWorldGen = worldGenSettings;
 
-      if (loadingRequest.type === 'save') {
-        const data = loadSaveData(loadingRequest.id);
-        if (!data) {
-          if (!cancelled) setScreen('title');
-          return;
-        }
-        currentSaveIdRef.current = loadingRequest.id;
-        pendingSaveRef.current = data;
-        setWorldSeed(data.seed);
-        if (data.worldGen) {
-          effectiveWorldGen = data.worldGen;
-          setWorldGenSettings(data.worldGen);
-        }
-        setLoadingProgress({ label: '加载存档 · 初始化世界', progress: 0.02 });
-        await waitForNextPaint();
-        if (cancelled || !mountRef.current) return;
-      }
-
       try {
-        const createdGame = await createBlockGame(mountRef.current, (nextSnapshot) => {
+        if (loadingRequest.type === 'save') {
+          const data = await loadSaveData(loadingRequest.id);
+          if (cancelled) return;
+          if (!data) throw new Error('找不到存档或存档内容已损坏');
+          currentSaveIdRef.current = loadingRequest.id;
+          pendingSaveRef.current = data;
+          if (data.worldGen) {
+            effectiveWorldGen = data.worldGen;
+            setWorldGenSettings(data.worldGen);
+          }
+          setLoadingProgress({ label: '加载存档 · 初始化世界', progress: 0.02 });
+          await waitForNextPaint();
+          if (cancelled || !mountRef.current) return;
+        }
+
+        const createdGame = await createGame(mountRef.current, (nextSnapshot) => {
+          if (epoch !== runtimeEpoch.current) return;
           isLockedRef.current = nextSnapshot.isLocked;
           setSnapshot(nextSnapshot);
-          if (nextSnapshot.isLocked) {
-            if (lockIntentRef.current || overlayRef.current === null) {
-              lockIntentRef.current = false;
-              clickPromptRef.current = false;
-              setShowClickPrompt(false);
-              setOverlayState(null);
-            } else {
-              gameRef.current?.unlockControls();
-            }
-          } else if (overlayRef.current === null && !lockIntentRef.current && !clickPromptRef.current) {
-            lockIntentRef.current = false;
-            setOverlayState('menu');
-          }
+          const unlock = controlsRef.current.observe(nextSnapshot.isLocked, nextSnapshot.isDead);
+          publishControlState();
+          if (unlock) gameRef.current?.unlockControls();
         }, () => openOverlayPanel('model'), { 
-          rendererBackend,
           worldGen: effectiveWorldGen,
+          initialSave: pendingSaveRef.current ?? undefined,
+          signal: abort.signal,
+          onError: error => {
+            if (epoch !== runtimeEpoch.current) return;
+            setGameError(`区块处理失败，请保存后重新进入：${error.message}`);
+            openOverlayPanel('menu');
+          },
           onHotbarStep: (direction) => {
             selectHotbarSlot((activeSlotRef.current + direction + hotbarItemsRef.current.length) % hotbarItemsRef.current.length);
           },
           onPauseRequest: () => {
-            lockIntentRef.current = false;
-            gameRef.current?.unlockControls();
-            setOverlayState('menu');
-            setSnapshot((s) => ({ ...s, isLocked: false }));
+            openOverlayPanel('menu');
           },
           onProgress: (label, progress) => {
             if (!cancelled) {
@@ -330,15 +333,12 @@ export function App() {
           return;
         }
         gameRef.current = createdGame;
-        const nextSettings = createdGame.getSettings();
-        setRendererBackend(nextSettings.rendererBackend);
-        setSettings(nextSettings);
 
         const pendingSave = pendingSaveRef.current;
         pendingSaveRef.current = null;
         loadingRequestRef.current = null;
         if (pendingSave) {
-          createdGame.load(pendingSave);
+          setModelItems(pendingSave.importedModels);
           if (pendingSave.hotbar.length > 0) {
             const restored: InventoryItem[] = pendingSave.hotbar.map(item =>
               item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', model: { id: item.modelId, name: item.modelId, kind: 'generic' } }
@@ -349,20 +349,20 @@ export function App() {
             setActiveSlot(pendingSave.activeSlot);
           }
         }
+        if (cancelled) { createdGame.dispose(); return; }
+        const nextSettings = createdGame.getSettings();
+        setSettings(nextSettings);
+        const held = hotbarItemsRef.current[activeSlotRef.current];
+        if (held?.type === 'block') createdGame.setSelectedBlock(held.block);
+        else if (held?.type === 'model') createdGame.setSelectedModel(held.model.id);
 
-        if (isTouch) {
-          lockIntentRef.current = true;
-          setOverlayState(null);
-          if (document.fullscreenElement) {
-            createdGame.touchLock();
-          } else {
-            setShowTouchFullscreenPrompt(true);
-          }
-        }
+        setOverlayState(null);
         setScreen('game');
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setRendererBackend('webgl');
+          gameRef.current?.dispose();
+          gameRef.current = null;
+          setGameError(`世界加载失败：${error instanceof Error ? error.message : String(error)}`);
           setSettings((currentSettings) => ({ ...currentSettings, rendererBackend: 'webgl' }));
           setScreen('title');
         }
@@ -373,24 +373,16 @@ export function App() {
 
     return () => {
       cancelled = true;
+      if (!gameRef.current && runtimeEpoch.current === epoch) runtimeEpoch.current++;
+      abort.abort();
     };
-  }, [screen, rendererBackend]);
-
-  useEffect(() => {
-    if (screen === 'game' && gameRef.current) {
-      lockIntentRef.current = true;
-      if (isTouch) {
-        if (!showTouchFullscreenPrompt) gameRef.current.touchLock();
-      } else {
-        gameRef.current.lockControls();
-      }
-    }
-  }, [screen, isTouch, showTouchFullscreenPrompt]);
+  }, [screen]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === 'INPUT') return;
+      if (!gameRef.current) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('input, select, textarea, [contenteditable="true"]')) return;
 
       const slotNumber = Number(event.key);
       if (slotNumber >= 1 && slotNumber <= 9) {
@@ -434,17 +426,8 @@ export function App() {
         event.preventDefault();
         event.stopPropagation();
         if (event.repeat) return;
-        if (overlayRef.current === 'menu') {
-          clickPromptRef.current = true;
-          setShowClickPrompt(true);
-          setOverlayState(null);
-        } else if (overlayRef.current === null) {
-          lockIntentRef.current = false;
-          clickPromptRef.current = false;
-          setShowClickPrompt(false);
-          setOverlayState('menu');
-          gameRef.current?.unlockControls();
-        }
+        // Escape only pauses. Browser pointerlockchange may arrive before keydown.
+        openOverlayPanel('menu');
       }
     }
 
@@ -516,15 +499,13 @@ export function App() {
   }
 
   function updateSetting<K extends keyof GameSettings>(key: K, value: GameSettings[K]) {
-    const next = { ...settings, [key]: value };
-    if (key === 'rendererBackend') {
-      setRendererBackend(value as GameSettings['rendererBackend']);
-      setSettings(next);
-      gameRef.current?.unlockControls();
-      return;
-    }
-    setSettings(next);
-    gameRef.current?.updateSettings({ [key]: value });
+    updateSettings({ [key]: value });
+  }
+
+  function updateSettings(patch: Partial<GameSettings>) {
+    gameRef.current?.updateSettings(patch);
+    const applied = gameRef.current?.getSettings();
+    setSettings(current => applied ?? { ...current, ...patch });
   }
 
   function updateModelSetting<K extends keyof Omit<PlacedModelSettings, 'id' | 'name'>>(key: K, value: PlacedModelSettings[K]) {
@@ -542,6 +523,7 @@ export function App() {
 
   async function importModel(file: File | undefined) {
     if (!file || !gameRef.current) return;
+    const game = gameRef.current, epoch = runtimeEpoch.current, revision = controlsRef.current.revision;
     if (!file.name.match(/\.(glb|gltf|pmx|pmd)$/i)) {
       setImportStatus('请选择 .glb / .gltf / .pmx / .pmd');
       return;
@@ -550,40 +532,46 @@ export function App() {
     setImportStatus(`导入中：${file.name}`);
     setImportProgress({ progress: 0.02, label: '开始导入', fileName: file.name });
     try {
-      const models = await gameRef.current.importModelFile(file, { onProgress: setImportProgress });
+      const models = await game.importModelFile(file, { onProgress: progress => { if (epoch === runtimeEpoch.current) setImportProgress(progress); } });
+      if (epoch !== runtimeEpoch.current) return;
       addImportedModels(models);
       setImportStatus(`已加入物品栏：${models.map((model) => model.name).join('、')}`);
-      window.setTimeout(() => setImportProgress(null), 650);
+      window.setTimeout(() => { if (epoch === runtimeEpoch.current) setImportProgress(null); }, 650);
     } catch {
+      if (epoch !== runtimeEpoch.current) return;
       setImportStatus('导入失败，检查模型和贴图路径');
       setImportProgress(null);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
-      if (overlayRef.current === 'file') setOverlayState('menu');
+      if (epoch === runtimeEpoch.current && revision === controlsRef.current.revision && overlayRef.current === 'file') setOverlayState('menu');
     }
   }
 
   async function importModelFolder(files: FileList | null) {
     if (!files || !gameRef.current) return;
+    const game = gameRef.current, epoch = runtimeEpoch.current, revision = controlsRef.current.revision;
     const fileArray = Array.from(files);
     setImportStatus(`导入文件夹：${fileArray.length} 个文件`);
     setImportProgress({ progress: 0.02, label: '扫描文件夹' });
     try {
-      const models = await gameRef.current.importModelFiles(fileArray, { onProgress: setImportProgress });
+      const models = await game.importModelFiles(fileArray, { onProgress: progress => { if (epoch === runtimeEpoch.current) setImportProgress(progress); } });
+      if (epoch !== runtimeEpoch.current) return;
       addImportedModels(models);
       setImportStatus(`已加入 ${models.length} 个 MMD 模型`);
-      window.setTimeout(() => setImportProgress(null), 650);
+      window.setTimeout(() => { if (epoch === runtimeEpoch.current) setImportProgress(null); }, 650);
     } catch {
+      if (epoch !== runtimeEpoch.current) return;
       setImportStatus('文件夹导入失败，检查是否包含 PMX/PMD');
       setImportProgress(null);
     } finally {
       if (folderInputRef.current) folderInputRef.current.value = '';
-      if (overlayRef.current === 'file') setOverlayState('menu');
+      if (epoch === runtimeEpoch.current && revision === controlsRef.current.revision && overlayRef.current === 'file') setOverlayState('menu');
     }
   }
 
   async function importVmd(file: File | undefined) {
     if (!file || !gameRef.current) return;
+    const game = gameRef.current, epoch = runtimeEpoch.current;
     if (!file.name.match(/\.vmd$/i)) {
       setImportStatus('请选择 .vmd 动作文件');
       return;
@@ -591,9 +579,11 @@ export function App() {
 
     setImportStatus(`导入动作：${file.name}`);
     try {
-      await gameRef.current.importVmdForSelectedModel(file);
+      await game.importVmdForSelectedModel(file);
+      if (epoch !== runtimeEpoch.current) return;
       setImportStatus(`已绑定动作：${file.name}`);
     } catch {
+      if (epoch !== runtimeEpoch.current) return;
       setImportStatus('VMD 绑定失败，请先选中一个 PMX/MMD 模型');
     } finally {
       if (vmdInputRef.current) vmdInputRef.current.value = '';
@@ -626,6 +616,8 @@ export function App() {
 
   if (screen === 'title') {
     return (
+      <>
+      {gameError && <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>}
       <TitleScreen
         densitySummary={densitySummary}
         finiteWorldRadius={finiteWorldRadius}
@@ -638,6 +630,7 @@ export function App() {
         onConfirmStartNewWorld={confirmStartNewWorld}
         onDeleteSave={deleteSave}
         onLoadGame={loadGameFromId}
+        onRefreshSaves={async () => setSaveMetaList(await getSaveMetaList())}
         onSetShowAdvancedWorldSettings={setShowAdvancedWorldSettings}
         onSetShowWorldSettings={setShowWorldSettings}
         onSetWorldGenSettings={setWorldGenSettings}
@@ -645,6 +638,7 @@ export function App() {
         onStartNewWorld={startNewWorld}
         onUpdateWorldGenScale={updateWorldGenScale}
       />
+      </>
     );
   }
 
@@ -654,6 +648,7 @@ export function App() {
 
   return (
     <main className={isLoadingScreen ? 'game-shell loading-screen' : 'game-shell'}>
+      {gameError && <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>}
       <div
         ref={mountRef}
         className="game-canvas"
@@ -690,7 +685,7 @@ export function App() {
           onLook={(dx, dy) => gameRef.current?.setTouchLook(dx, dy)}
           onTap={(x, y) => gameRef.current?.touchTap(x, y)}
           onPlace={(x, y) => gameRef.current?.touchPlace(x, y)}
-          onPause={() => { lockIntentRef.current = false; gameRef.current?.unlockControls(); setOverlayState('menu'); setSnapshot(s => ({ ...s, isLocked: false })); }}
+          onPause={() => openOverlayPanel('menu')}
         />
       )}
 
@@ -710,11 +705,7 @@ export function App() {
       {!isTouch && !snapshot.isLocked && !snapshot.isDead && overlay === 'menu' && (
         <DesktopPauseMenu
           saveStatus={saveStatus}
-          onContinue={() => {
-            clickPromptRef.current = true;
-            setShowClickPrompt(true);
-            setOverlayState(null);
-          }}
+          onContinue={requestGameLock}
           onImportMmdFolder={() => openFilePicker(folderInputRef.current)}
           onImportModel={() => openFilePicker(fileInputRef.current)}
           onOpenInventory={() => openOverlayPanel('inventory')}
@@ -759,7 +750,7 @@ export function App() {
       )}
 
       {overlay === 'settings' && (
-        <SettingsPanel isMobile={isTouch} settings={settings} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} />
+        <SettingsPanel isMobile={isTouch} settings={settings} onReturnToMenu={returnToMenu} onUpdateSetting={updateSetting} onUpdateSettings={updateSettings} />
       )}
 
       {overlay === 'model' && selectedModel && (

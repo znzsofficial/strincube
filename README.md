@@ -2,17 +2,46 @@
 
 StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and TypeScript. It focuses on quick world creation, playful building, procedural terrain, persistent edits, water simulation, TNT interactions, imported models, and mobile-friendly controls.
 
-**Play online:** https://strincube.pages.dev
+**Play online:** https://strincube.pages.dev · https://game.nekolaska.vip
+
+## Documentation
+
+- [Engine architecture](docs/ENGINE.md): module ownership, workers, saves and rendering.
+- [Development and verification](docs/TESTING.md): setup, regression suites and browser checks.
+- [Performance measurements](docs/PERFORMANCE.md): reproducible scene, measured tradeoffs and limits.
+- [Deployment record](docs/DEPLOYMENT.md): production release and publishing procedure.
+- [Remaining work](docs/ROADMAP.md): prioritized tasks and acceptance criteria.
+
+The 2026-11-17 release is deployed as `cb479810`. Its verification completed with
+63 Node tests, 91 browser assertions and a production build; see the deployment
+record for source-control status and online smoke-test results.
 
 ## Current Highlights
 
+### Rebuilt engine
+
+New worlds now use the independent runtime in `src/engine/`: pure deterministic
+world generation, evictable modified chunks, mesh-independent collision/picking,
+and IndexedDB saves including imported model files. This is the only engine;
+v2/localStorage saves are not supported. See [engine architecture](docs/ENGINE.md)
+for boundaries, renderer scope and verification instructions.
+
+Run `npm test` with Node 22.18+ for core regression checks. The development route
+`/tests/browser.html` exercises rendering, controls and persistence in a browser.
+
+### Gameplay
+
 - **Infinite chunk world**: new worlds stream chunks around the player instead of generating a fixed map up front.
-- **Chunk-delta saves**: saves store generated chunk metadata plus block and water edits, keeping new saves smaller while preserving older snapshot saves.
-- **Natural world generation**: large biome regions, smoother plains, oceans, beaches, stony shores, mountain slopes, snowy peaks, caves, ores, lakes, and hydrology-driven rivers.
-- **Lowland river spawn**: new worlds try to start the player on safe land near a real lowland river.
-- **Minecraft-style water behavior**: static generated water wakes when disturbed, placed water flows dynamically, falling water keeps its spread cost, and saves persist water state.
+- **Background terrain**: a dedicated Worker generates streamed terrain; bounded requests and transferable buffers keep generation off the rendering thread while preserving player edits.
+- **Background meshing**: a separate Worker builds geometry; stale results are rejected and old meshes remain visible until replacement is ready.
+- **Material batching**: compatible textures share padded atlases. The fixed-camera benchmark reduced draw calls from 233 to 127; this is not a measured GPU/FPS gain.
+- **Quality controls**: low/medium/high presets, individual shadow resolution/range/refresh budgets and optional postprocessing.
+- **Persistent edits**: block and water changes survive chunk eviction and reload; model files and placement settings are saved alongside them.
+- **Deterministic generation**: rolling land, oceans, beaches, mountains, caves, ores and meandering river valleys with order-independent cross-chunk trees.
+- **Dry spawn**: spawning checks actual ground and clearance, including player edits on respawn.
+- **Water simulation**: generated water starts static, nearby terrain changes wake it, and dynamic water state is saved.
 - **World creation controls**: create infinite or finite worlds, then tune mountain, ocean, river, and biome scale from the advanced setup panel.
-- **Debug HUD**: optional FPS/worldgen overlay with coordinates, biome, climate, river/lake markers, and hydrology data.
+- **Debug HUD**: raw frame mean/P95, CPU stages, Worker time, draw calls, resource/queue counts, atlas/shadow activity and world coordinates.
 - **Building sandbox**: 120+ blocks, block picker, inventory, continuous mining/placing, TNT, falling blocks, item frames, and ambient creatures.
 - **Model import**: GLTF and MMD model support with placement, animation, and per-part settings.
 - **Desktop and mobile play**: pointer-lock controls on desktop and touch controls on mobile.
@@ -35,6 +64,11 @@ Mobile controls appear automatically on touch devices.
 
 ## Getting Started
 
+Use Node **22.18+**. Before building, supply the block texture files referenced by
+`src/engine/blocks.ts` under `assets/minecraft/textures/block/`. The `assets/` directory
+is gitignored and is not supplied by dependency installation; a source-only clone
+needs these files separately. See [setup details](docs/TESTING.md#prerequisites).
+
 ```bash
 npm install
 npm run dev
@@ -53,23 +87,30 @@ The production build is written to `dist/`.
 
 ## Save System
 
-StrinCube keeps saves in the browser. Current saves use `chunkDelta` mode:
-
+StrinCube keeps saves in the browser. New v3 saves use IndexedDB with an independent
+edit journal and original model resources; the save list reads lightweight metadata.
 - generated chunks are recreated from the world seed;
 - player edits are stored per chunk;
-- water additions, removals, falling state, and static state are stored as water edits;
-- legacy full-world snapshot saves remain loadable.
+- water state and pending simulation work are persisted;
+- original model files, texture paths, placements and VMD files are persisted.
 
 This lets infinite worlds stay persistent without serializing every generated block.
 
+Saves are local to the browser profile and site origin. The Pages domain, custom
+domain and individual deployment URLs have separate save databases. Use the same
+address to revisit a world. In the development version, select **导出 → 下载备份**
+beside a saved world to keep a `.strincube` file. On another origin or device,
+**导入世界备份** validates that file and adds a separate save; it does not replace
+the original. Saving is manual. The published `cb479810` version predates these
+backup controls. See [remaining work](docs/ROADMAP.md#save-management).
+
 ## World Generation
 
-World generation combines climate noise, continentalness, erosion, ridge noise, ocean depth, lake/depression sampling, and a local hydrology patch for rivers. The generator currently includes:
-
-- plains, forest, jungle, desert, savanna, taiga, snowy, ocean, beach, stony shore, meadow, slope, and peak-style terrain;
-- lowland river carving guarded against high mountain cuts;
-- caves below the shallow surface band, with deeper ores and cave decoration;
-- static generated rivers, lakes, and sea water that wake when the terrain changes.
+World generation combines continental and climate noise, mountain masks, fixed-datum
+river valleys and continuous 3D cave noise. Beaches require adjacent water; trees
+use global anchors and a halo so neighboring chunk load order does not change them.
+Generation is versioned independently of the save format. Branching drainage networks
+and erosion simulation are not implemented.
 
 ## Project Structure
 
@@ -78,16 +119,25 @@ src/
   App.tsx              UI shell, world creation, menus, HUD
   main.tsx             React entry point
   styles.css           Application styles
-  game/
-    blockGame.ts       Main runtime: rendering, input, physics, chunk lifecycle
-    blocks.ts          Block definitions, textures, materials
-    chunk.ts           Chunk coordinate helpers
-    chunkManager.ts    Chunk request queue and load/unload radius logic
-    models.ts          Imported model helpers
-    save.ts            Save/load serialization and chunk data application
-    types.ts           Shared game, world, save, and water types
-    water.ts           Water simulation, rendering, and static-water wake-up
-    worldgen.ts        Terrain, biome, hydrology, cave, ore, and spawn generation
+  saveStorage.ts        Save list and IndexedDB access
+  engine/
+    runtime.ts          Single game entry and browser adapter composition
+    types.ts            Runtime/UI contracts and v3 saves
+    blocks.ts           Block definitions and texture assets
+    modelHelpers.ts     Model format/material helpers
+    modelSystem.ts      Model assets, instances and restoration
+    persistence.ts      Atomic IndexedDB saves and metadata
+    quality.ts          Atomic low/medium/high preset patches
+    shadowPolicy.ts     Headless shadow invalidation and refresh budget
+    diagnostics.ts      Bounded CPU/frame/Worker statistics
+    input.ts            Mouse, keyboard, touch and gamepad
+    core/               Headless session, clock, world, generation and simulation
+    render/             Scene, chunk meshes and ambient entities
+    workers/            Terrain/mesh worker entry points and transport
+  ui/
+    controlState.ts     Exclusive menu, resume and play modes
+tests/                  Node tests and development-only browser fixtures
+docs/                   Architecture, verification, measurements and roadmap
 ```
 
 ## Tech Stack
@@ -96,7 +146,6 @@ src/
 - [React](https://react.dev/) for UI
 - [TypeScript](https://www.typescriptlang.org/) for type safety
 - [Vite](https://vite.dev/) for development and builds
-- [pako](https://github.com/nodeca/pako) for compressed saves
 - [@yohawing/three-mmd-loader](https://github.com/yohawing/three-mmd-loader) for MMD support
 
 ## Assets
@@ -106,7 +155,7 @@ Block textures use [Pixel Perfection Legacy](https://www.planetminecraft.com/tex
 ## Notes
 
 - `npm run build` may show Vite warnings about Node modules externalized by the MMD loader package. These warnings are currently non-blocking for the browser build.
-- Large bundle warnings are expected because the app includes Three.js/WebGPU and MMD-related runtime code.
+- Large bundle warnings may appear for Three.js and MMD-related runtime code.
 
 ## License
 

@@ -1,49 +1,39 @@
-import type { WorldSaveData } from './game/blockGame';
-import { getWorldRadius } from './game/types';
-
-const SAVE_KEY_PREFIX = 'strincube_save_';
+import type { WorldSaveData } from './engine/types';
+import { getWorldRadius } from './engine/types';
+import { worldSaves } from './engine/persistence';
+import { validateSaveSummary, validateWorldSave } from './engine/saveValidation';
 
 export type SaveMeta = { id: string; name: string; savedAt: number; worldModeLabel: string; worldSeedLabel: string };
 
-function describeWorldMode(data: WorldSaveData) {
+function describeWorldMode(data: Pick<WorldSaveData, 'worldGen'>) {
   const settings = data.worldGen;
-  if (!settings) return '旧版世界';
   if (settings.flatWorld) return '超平坦测试';
-  if (settings.infiniteWorld ?? true) return '无限世界';
+  if (settings.infiniteWorld) return '无限世界';
   return `有限世界 · 半径 ${getWorldRadius(settings)} 格`;
 }
 
-export function getSaveMetaList(): SaveMeta[] {
-  const list: SaveMeta[] = [];
-  for (let i = 0; i < localStorage.length; i += 1) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(SAVE_KEY_PREFIX)) {
-      try {
-        const data = JSON.parse(localStorage.getItem(key)!) as WorldSaveData;
-        list.push({
-          id: key.replace(SAVE_KEY_PREFIX, ''),
-          name: data.name,
-          savedAt: data.savedAt,
-          worldModeLabel: describeWorldMode(data),
-          worldSeedLabel: `种子 ${data.seed}`,
-        });
-      } catch { /* ignore corrupt saves */ }
-    }
+export async function getSaveMetaList(): Promise<SaveMeta[]> {
+  const result: SaveMeta[] = [];
+  for (const data of await worldSaves.list()) {
+    try { validateSaveSummary(data); } catch { continue; } // A corrupt row must not hide other saves.
+    result.push({ id: data.id, name: data.name, savedAt: data.savedAt,
+      worldModeLabel: describeWorldMode(data), worldSeedLabel: `种子 ${data.seed}` });
   }
-  return list.sort((a, b) => b.savedAt - a.savedAt);
+  return result.sort((a, b) => b.savedAt - a.savedAt);
 }
 
-export function loadSaveData(id: string): WorldSaveData | null {
-  try {
-    const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${id}`);
-    return raw ? JSON.parse(raw) as WorldSaveData : null;
-  } catch { return null; }
+export async function loadSaveData(id: string): Promise<WorldSaveData | null> {
+  const row = await worldSaves.get(id);
+  if (row === undefined) return null;
+  const data = row?.data;
+  validateWorldSave(data);
+  return data;
 }
 
-export function storeSaveData(id: string, data: WorldSaveData) {
-  localStorage.setItem(`${SAVE_KEY_PREFIX}${id}`, JSON.stringify(data));
+export async function storeSaveData(id: string, data: WorldSaveData) {
+  await worldSaves.put(id, data);
 }
 
-export function deleteSaveData(id: string) {
-  localStorage.removeItem(`${SAVE_KEY_PREFIX}${id}`);
+export async function deleteSaveData(id: string) {
+  await worldSaves.delete(id);
 }

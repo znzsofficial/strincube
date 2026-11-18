@@ -315,6 +315,29 @@ input:focus-visible {
   flex-shrink: 0;
 }
 
+.world-backup-btn {
+  padding: 6px 10px;
+  background: var(--menu-panel, #253036);
+  color: var(--menu-ink);
+  border: 1px solid oklch(0.38 0.025 250);
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.world-select-actions .world-backup-btn { font-size: 12px; }
+.world-backup-tools { display: grid; justify-items: center; gap: 6px; margin-top: 12px; font-size: 13px; }
+.world-backup-tools [role='status'] { max-width: 100%; overflow-wrap: anywhere; }
+.world-backup-tools a { color: var(--menu-accent); }
+.world-select-info .backup-imported { color: var(--menu-accent); }
+.world-backup-btn:focus-visible, .world-backup-tools a:focus-visible { outline: 2px solid var(--menu-accent); }
+
+@media (max-width: 520px) {
+  .world-select-item { flex-wrap: wrap; }
+  .world-select-item .world-select-actions { flex-wrap: wrap; }
+  .world-select-item .world-select-info { flex-basis: 100%; }
+  .world-select-actions button, .world-backup-tools button { min-height: 40px; }
+}
+
 .world-play-btn {
   padding: 6px 14px !important;
   font-size: 12px !important;
@@ -1039,12 +1062,45 @@ input:focus-visible {
 .settings-panel {
   display: grid;
   gap: 11px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .settings-panel-scroll {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 11px;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.38 0.026 250) transparent;
+}
+
+.settings-panel .quality-preset select {
+  min-height: 44px;
+}
+
+.settings-panel .quality-hint {
+  margin: -3px 0 6px;
+  color: var(--menu-ink);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.shadow-settings {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  background: oklch(0.15 0.015 250);
+  border-radius: 8px;
+}
+
+.settings-panel .shadow-settings label {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+}
+
+.settings-panel .shadow-settings select {
+  min-height: 44px;
 }
 
 .mobile-settings-panel {
@@ -1097,6 +1153,11 @@ input:focus-visible {
   font-weight: 700;
 }
 
+.settings-panel label > input,
+.settings-panel label > select {
+  min-width: 0;
+}
+
 .postprocess-panel {
   display: grid;
   gap: 8px;
@@ -1136,6 +1197,7 @@ input:focus-visible {
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
+  margin: 0;
   height: 20px;
   padding: 0 2px;
   background: transparent;
@@ -2380,3 +2442,21 @@ input:focus-visible {
     text-align: left;
   }
 }
+.game-error {
+  position: fixed;
+  z-index: 200;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(36rem, calc(100% - 2rem));
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: .75rem;
+  background: oklch(.25 .04 25);
+  color: oklch(.95 .02 25);
+  box-shadow: 0 .5rem 1.5rem oklch(0 0 0 / .3);
+}
+.game-error span { flex: 1; overflow-wrap: anywhere; }
+.game-error button { min-height: 2.75rem; padding: .5rem .75rem; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: .4rem; cursor: pointer; }

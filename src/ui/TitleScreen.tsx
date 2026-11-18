@@ -1,5 +1,6 @@
 import { Cuboid } from 'lucide-react';
-import type { WorldGenSettings } from '../game/blockGame';
+import { useEffect, useRef, useState } from 'react';
+import type { WorldGenSettings } from '../engine/types';
 import type { SaveMeta } from '../saveStorage';
 
 type WorldMode = 'infinite' | 'finite' | 'flat';
@@ -16,6 +17,7 @@ interface TitleScreenProps {
   onConfirmStartNewWorld: () => void;
   onDeleteSave: (id: string) => void;
   onLoadGame: (id: string) => void;
+  onRefreshSaves: () => Promise<void>;
   onSetShowAdvancedWorldSettings: (value: boolean | ((current: boolean) => boolean)) => void;
   onSetShowWorldSettings: (value: boolean) => void;
   onSetWorldGenSettings: (settings: WorldGenSettings) => void;
@@ -40,6 +42,7 @@ export function TitleScreen({
   onConfirmStartNewWorld,
   onDeleteSave,
   onLoadGame,
+  onRefreshSaves,
   onSetShowAdvancedWorldSettings,
   onSetShowWorldSettings,
   onSetWorldGenSettings,
@@ -47,6 +50,45 @@ export function TitleScreen({
   onStartNewWorld,
   onUpdateWorldGenScale,
 }: TitleScreenProps) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const locked = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [importedId, setImportedId] = useState('');
+  const [download, setDownload] = useState<{ blob: Blob; filename: string } | null>(null);
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!download) { setUrl(''); return; }
+    const href = URL.createObjectURL(download.blob);
+    setUrl(href);
+    return () => URL.revokeObjectURL(href);
+  }, [download]);
+
+  async function transfer(task: { file: File } | { id: string }) {
+    if (locked.current) return;
+    locked.current = true;
+    setBusy(true); setDownload(null); setUrl('');
+    const importing = 'file' in task;
+    setMessage(importing ? '正在检查备份…' : '正在打包世界与模型文件…');
+    try {
+      const backups = await import('../worldBackups');
+      if (importing) {
+        const result = await backups.importWorldBackup(task.file);
+        setImportedId(result.id);
+        try {
+          await onRefreshSaves();
+          setMessage(`已将「${result.name}」导入为独立存档。`);
+        } catch { setMessage('存档已导入，但列表刷新失败。请刷新页面查看。'); }
+      } else {
+        setDownload(await backups.exportWorldBackup(task.id));
+        setMessage('备份已准备好。');
+      }
+    } catch (error) {
+      const reason = error instanceof DOMException && error.name === 'QuotaExceededError' ? '浏览器空间不足。' : error instanceof Error ? error.message : String(error);
+      setMessage(`${importing ? '导入' : '导出'}失败：${reason}`);
+    } finally { locked.current = false; setBusy(false); }
+  }
+
   return (
     <main className="game-shell title-screen">
       <div className={showWorldSettings ? 'title-content world-creator-open' : 'title-content'}>
@@ -60,7 +102,7 @@ export function TitleScreen({
             <div className="world-settings-header">
               <div>
                 <h3>创建新世界</h3>
-                <p>{worldSummary}</p>
+                <p>{worldSummary} · 新版引擎</p>
               </div>
               <Cuboid size={30} aria-hidden="true" />
             </div>
@@ -94,12 +136,14 @@ export function TitleScreen({
                 <input
                   type="text"
                   className="seed-input"
+                  aria-label="世界种子"
                   inputMode="numeric"
                   placeholder="随机"
                   value={worldGenSettings.seed ?? ''}
                   onChange={(event) => {
                     const raw = event.target.value.trim();
-                    onSetWorldGenSettings({ ...worldGenSettings, seed: raw ? Number(raw) || undefined : undefined });
+                    const seed = raw === '' ? undefined : Number(raw);
+                    if (seed === undefined || Number.isSafeInteger(seed)) onSetWorldGenSettings({ ...worldGenSettings, seed });
                   }}
                 />
               </section>
@@ -220,13 +264,15 @@ export function TitleScreen({
                 saveMetaList.map((meta) => (
                   <div key={meta.id} className="world-select-item">
                     <div className="world-select-info">
-                      <strong>{meta.name}</strong>
+                       <strong>{meta.name}</strong>
+                       {meta.id === importedId && <small className="backup-imported">刚导入的副本</small>}
                       <small>{new Date(meta.savedAt).toLocaleString()}</small>
                       <small>{meta.worldModeLabel} · {meta.worldSeedLabel}</small>
                     </div>
                     <div className="world-select-actions">
-                      <button type="button" className="world-play-btn" onClick={() => onLoadGame(meta.id)}><iconify-icon icon="lucide:play" width="14"></iconify-icon> 进入世界</button>
-                      <button type="button" className="world-delete-btn" onClick={() => { if (confirm('确定删除此存档？')) onDeleteSave(meta.id); }}><iconify-icon icon="lucide:trash-2" width="14"></iconify-icon> 删除</button>
+                      <button type="button" className="world-play-btn" disabled={busy} onClick={() => onLoadGame(meta.id)}><iconify-icon icon="lucide:play" width="14"></iconify-icon> 进入世界</button>
+                      <button type="button" className="world-backup-btn" disabled={busy} aria-label={`导出备份：${meta.name}`} onClick={() => void transfer({ id: meta.id })}>导出</button>
+                      <button type="button" className="world-delete-btn" disabled={busy} onClick={() => { if (confirm('确定删除此存档？')) onDeleteSave(meta.id); }}><iconify-icon icon="lucide:trash-2" width="14"></iconify-icon> 删除</button>
                     </div>
                   </div>
                 ))
@@ -234,9 +280,18 @@ export function TitleScreen({
                 <div className="world-select-empty">还没有存档，创建一个新世界吧</div>
               )}
             </div>
-            <button type="button" className="start-button" onClick={onStartNewWorld}>
+            <button type="button" className="start-button" disabled={busy} onClick={onStartNewWorld}>
               <iconify-icon icon="lucide:plus" width="18"></iconify-icon> 创建新世界
             </button>
+            <div className="world-backup-tools">
+              <input ref={fileInput} type="file" hidden accept=".strincube" aria-label="选择世界备份文件" onChange={event => {
+                const file = event.currentTarget.files?.[0]; event.currentTarget.value = '';
+                if (file) void transfer({ file });
+              }} />
+              <button type="button" className="world-backup-btn" disabled={busy} onClick={() => fileInput.current?.click()}>导入世界备份</button>
+              <small>恢复为新存档，保留已有世界。</small>
+              {message && <div role="status">{message} {url && download && <a href={url} download={download.filename}>下载备份</a>}</div>}
+            </div>
             <div className="title-controls">
               <div className="title-controls-row">
                 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>

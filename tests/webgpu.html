@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StrinCube · WebGPU 地形验证</title><link rel="icon" href="data:,">
+<style>
+body{font:16px/1.5 system-ui;max-width:88rem;margin:auto;padding:1rem}label,button{margin-right:.8rem}figure{margin:0}img{display:block;width:100%;height:auto}#pictures{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,28rem),1fr));gap:1rem}pre{overflow:auto}button,select{font:inherit}
+</style></head><body>
+<h1>WebGPU 地形验证</h1><p>种子 42 · 25 区块 · 固定池塘与天然植被 · 640×480，DPR 1 · 无阴影、后处理、模型。每次先绘制稳定 WebGL 对照，再绘制所选路径；图像为实际帧截图。</p>
+<label>候选路径 <select id="mode"><option value="auto">请求 WebGPU</option><option value="force-webgl2">强制 Three 内部 WebGL2 回退</option><option value="fail-init">注入初始化失败 → 新画布 WebGL</option></select></label>
+<button id="run" disabled>运行对照</button><output id="status" aria-live="polite">加载中</output>
+<div id="pictures"></div><pre id="result"></pre><script type="module" src="./webgpu.ts"></script></body></html>

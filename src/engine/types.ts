@@ -10,13 +10,18 @@ export type GameSettings = {
   daySpeed: number;
   pixelRatio: number;
   shadows: boolean;
+  shadowResolution: 512 | 1024 | 2048;
+  /** Half-width of the directional shadow volume, in world units. */
+  shadowRange: number;
+  /** Maximum shadow refreshes per second of raw elapsed time. */
+  shadowUpdateHz: number;
   viewDistance: number;
   modelBrightness: number;
   breakSpeed: number;
   showFps: boolean;
   timeOfDay: number;
   infiniteWaterSpread: boolean;
-  rendererBackend: 'webgl' | 'webgpu';
+  rendererBackend: 'webgl';
   postProcessing: boolean;
   bloomStrength: number;
   vignette: boolean;
@@ -40,54 +45,6 @@ export type WorldGenSettings = {
   riverScale: number;
   biomeScale: number;
   seed?: number;
-};
-
-export type ChunkState = 'empty' | 'terrain' | 'populated' | 'meshed';
-
-export type GeneratedStage = 'none' | 'terrain' | 'populated';
-
-export type BlockEdit = {
-  x: number;
-  y: number;
-  z: number;
-  type: BlockType | null;
-};
-
-export type WaterEdit = {
-  x: number;
-  y: number;
-  z: number;
-  distance?: number;
-  level?: number;
-  source?: boolean;
-  falling?: boolean;
-  static?: boolean;
-  removed?: boolean;
-};
-
-export type ChunkSaveData = {
-  version: 1;
-  chunkX: number;
-  chunkZ: number;
-  generatedStage: GeneratedStage;
-  blockEdits: BlockEdit[];
-  waterEdits: WaterEdit[];
-  structureRefs: string[];
-  modified?: boolean;
-};
-
-export type ChunkData = {
-  chunkX: number;
-  chunkZ: number;
-  state: ChunkState;
-  generatedStage: GeneratedStage;
-  dirtyMesh: boolean;
-  dirtyWaterMesh: boolean;
-  modified: boolean;
-  structureRefs: string[];
-  blockEdits: BlockEdit[];
-  waterEdits: WaterEdit[];
-  lastAccessTime?: number;
 };
 
 export const worldSizePresets: Record<WorldGenSettings['worldSize'], number> = {
@@ -229,6 +186,7 @@ export type StoredModel = ImportedModelItem & {
 // ──── Snapshot ────
 
 export type GameSnapshot = {
+  performance?: import('./diagnostics').PerformanceSnapshot;
   selectedBlock: BlockType;
   blockCount: number;
   timeOfDay: number;
@@ -270,44 +228,23 @@ export type GameSnapshot = {
 // ──── Save data ────
 
 export type WorldSaveData = {
-  version: 2;
+  version: 3;
+  engineData: import('./persistence').EngineData;
   name: string;
   savedAt: number;
   seed: number;
   worldGen: WorldGenSettings;
-  saveMode?: 'legacySnapshot' | 'chunkDelta';
-  blocksBin?: string;
-  blockDict?: string[];
-  waterCells?: [string, { distance: number; level: number; source: boolean; falling?: boolean; static?: boolean }][];
-  player: {
-    x: number; y: number; z: number;
-    yaw: number; pitch: number;
-    physicalY: number;
-  };
   timeOfDay: number;
   settings: Partial<GameSettings>;
   hotbar: ({ type: 'block'; block: BlockType } | { type: 'model'; modelId: string })[];
   activeSlot: number;
-  placedModels: {
-    id: string; modelId: string; name: string;
-    x: number; y: number; z: number;
-    scale: number; baseScale: number;
-    rotation: number;
-    brightness: number; opacity: number;
-    visible: boolean; shadows: boolean;
-    animation: string; animationSpeed: number;
-    animationDistance: number;
-    parts: { id: string; name: string; opacity: number; visible: boolean }[];
-  }[];
   importedModels: { id: string; name: string; kind: 'generic' | 'mmd' }[];
-  itemFrameContents: [string, string][];
-  chunks?: ChunkSaveData[];
 };
 
 // ──── Options / API ────
 
 export type BlockGameOptions = {
-  rendererBackend?: GameSettings['rendererBackend'];
+  onError?: (error: Error) => void;
   worldGen?: WorldGenSettings;
   onProgress?: (label: string, progress: number) => void;
   onHotbarStep?: (direction: -1 | 1) => void;
@@ -331,7 +268,6 @@ export type BlockGameApi = {
   getSettings: () => GameSettings;
   noteMmdSupport: () => string;
   save: (name: string) => WorldSaveData;
-  load: (data: WorldSaveData) => void;
   respawn: () => void;
   setTouchMove: (x: number, y: number) => void;
   setTouchLook: (dx: number, dy: number) => void;

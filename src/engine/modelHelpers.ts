@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import type {
   GameSettings,
@@ -19,7 +18,6 @@ export type { StoredModel, PlacedModelEntity, ModelPart, MmdModelHandle, MmdRunt
 export interface ModelContext {
   scene: THREE.Scene;
   settings: GameSettings;
-  gltfLoader: GLTFLoader;
   importedModelMaterials: Set<THREE.Material>;
   storedModels: Map<string, StoredModel>;
   placedModels: Map<string, PlacedModelEntity>;
@@ -178,11 +176,7 @@ export function updateProgress(options: ModelImportOptions | undefined, progress
   options?.onProgress?.({ progress: THREE.MathUtils.clamp(progress, 0, 1), label, fileName });
 }
 
-export function noteMmdSupport(): string {
-  return 'PMX/PMD folders are supported through @yohawing/three-mmd-loader texture maps.';
-}
-
-export async function loadMmdTools(): Promise<any> {
+export async function loadMmdTools() {
   return import('@yohawing/three-mmd-loader');
 }
 
@@ -276,16 +270,6 @@ export function findPlacedModelFromObject(ctx: ModelContext, object: THREE.Objec
     current = current.parent;
   }
   return null;
-}
-
-export function placeImportedObject(ctx: ModelContext, object: THREE.Object3D, position: THREE.Vector3, scale = 1, kind: 'generic' | 'mmd' = 'generic'): THREE.Object3D {
-  object.position.copy(position);
-  object.scale.setScalar(scale);
-  if (kind === 'mmd') tuneMmdObject(object);
-  prepareImportedObject(object, ctx.settings.shadows, ctx.importedModelMaterials);
-  applyModelBrightness(ctx.importedModelMaterials, ctx.settings.modelBrightness);
-  ctx.scene.add(object);
-  return object;
 }
 
 export function registerImportedModel(ctx: ModelContext, root: THREE.Object3D, name: string, kind: 'generic' | 'mmd', scale = 1, mmdModel?: MmdModelHandle): ImportedModelItem {
@@ -390,26 +374,6 @@ export function placeStoredModel(ctx: ModelContext, modelId: string, position: T
   return clone;
 }
 
-export async function importGltfModel(ctx: ModelContext, url: string, position = new THREE.Vector3()): Promise<THREE.Object3D> {
-  const gltf = await ctx.gltfLoader.loadAsync(url);
-  gltf.scene.position.copy(position);
-  gltf.scene.traverse((object) => {
-    if (object instanceof THREE.Mesh) {
-      object.castShadow = ctx.settings.shadows;
-      object.receiveShadow = true;
-    }
-  });
-  ctx.scene.add(gltf.scene);
-  return gltf.scene;
-}
-
-export async function importMmdModel(ctx: ModelContext, source: File | string, position = new THREE.Vector3()): Promise<THREE.Object3D> {
-  const { ThreeMmdLoader } = await loadMmdTools();
-  const mmdLoader = new ThreeMmdLoader();
-  const model = await mmdLoader.loadModel(source);
-  return placeImportedObject(ctx, model.root, position, 0.12, 'mmd');
-}
-
 export async function importMmdModelFiles(ctx: ModelContext, files: File[], modelFile: File, options?: ModelImportOptions, progressStart = 0, progressSpan = 1): Promise<ImportedModelItem> {
   updateProgress(options, progressStart + progressSpan * 0.08, '读取 MMD 文件', modelFile.name);
   const { createMmdTextureMapFromFiles, ThreeMmdLoader } = await loadMmdTools();
@@ -420,62 +384,6 @@ export async function importMmdModelFiles(ctx: ModelContext, files: File[], mode
   updateProgress(options, progressStart + progressSpan * 0.82, '注册可放置模型', modelFile.name);
   await new Promise((resolve) => window.setTimeout(resolve, 0));
   return registerImportedModel(ctx, model.root, modelFile.name, 'mmd', 0.12, model as MmdModelHandle);
-}
-
-export async function importGltfModelFile(ctx: ModelContext, file: File, options?: ModelImportOptions): Promise<ImportedModelItem> {
-  const url = URL.createObjectURL(file);
-  try {
-    updateProgress(options, 0.15, '读取 GLTF/GLB', file.name);
-    const gltf = await ctx.gltfLoader.loadAsync(url);
-    updateProgress(options, 0.85, '注册可放置模型', file.name);
-    return registerImportedModel(ctx, gltf.scene, file.name, 'generic', 1);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-export async function importModelFiles(ctx: ModelContext, files: File[], options?: ModelImportOptions): Promise<ImportedModelItem[]> {
-  const hasMmdFiles = files.some((file) => file.name.match(/\.(pmx|pmd)$/i));
-  if (!hasMmdFiles) {
-    const gltfModel = files.find((file) => file.name.match(/\.(glb|gltf)$/i));
-    if (gltfModel) return importModelFile(ctx, gltfModel, options);
-    return Promise.reject(new Error('No supported model file found.'));
-  }
-
-  updateProgress(options, 0.03, '扫描 MMD 文件夹');
-  const { findMmdModelFiles } = await loadMmdTools();
-  const mmdModels = findMmdModelFiles(files);
-  if (mmdModels.length > 0) {
-    const imported: ImportedModelItem[] = [];
-    for (const [index, mmdModel] of mmdModels.entries()) {
-      const start = 0.06 + (index / mmdModels.length) * 0.9;
-      const span = 0.9 / mmdModels.length;
-      try {
-        imported.push(await importMmdModelFiles(ctx, files, mmdModel, options, start, span));
-        updateProgress(options, start + span, `已处理 ${index + 1}/${mmdModels.length}`, mmdModel.name);
-      } catch (error) {
-        console.warn(`Failed to import MMD model ${mmdModel.name}`, error);
-      }
-    }
-    updateProgress(options, 1, '导入完成');
-    if (imported.length > 0) return imported;
-  }
-
-  const gltfModel = files.find((file) => file.name.match(/\.(glb|gltf)$/i));
-  if (gltfModel) return importModelFile(ctx, gltfModel, options);
-
-  return Promise.reject(new Error('No supported model file found.'));
-}
-
-export async function importModelFile(ctx: ModelContext, file: File, options?: ModelImportOptions): Promise<ImportedModelItem[]> {
-  if (file.name.match(/\.(pmx|pmd)$/i)) {
-    const item = await importMmdModelFiles(ctx, [file], file, options);
-    updateProgress(options, 1, '导入完成', file.name);
-    return [item];
-  }
-  const item = await importGltfModelFile(ctx, file, options);
-  updateProgress(options, 1, '导入完成', file.name);
-  return [item];
 }
 
 export async function importVmdForSelectedModel(ctx: ModelContext, file: File): Promise<void> {

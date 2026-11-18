@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>StrinCube runtime verification</title>
+    <style>
+      body {
+        font: 16px system-ui;
+        background: #17212a;
+        color: #eee;
+      }
+      button {
+        padding: 12px;
+      }
+      #mount {
+        width: 640px;
+        height: 480px;
+      }
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>新版运行时集成验证</h1>
+    <button id="run">运行完整验证</button>
+    <pre id="result">等待运行</pre>
+    <div id="mount"></div>
+    <script type="module" src="./browser.ts"></script>
+  </body>
+</html>
