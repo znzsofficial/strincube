@@ -17,10 +17,10 @@
 
 .touch-joystick {
   position: absolute;
-  left: 24px;
-  bottom: 80px;
-  width: 120px;
-  height: 120px;
+  left: var(--hud-left);
+  bottom: var(--control-bottom);
+  width: var(--stick-size);
+  height: var(--stick-size);
   z-index: 1;
   touch-action: none;
 }
@@ -36,8 +36,8 @@
 }
 
 .touch-joystick-knob {
-  width: 44px;
-  height: 44px;
+  width: 38%;
+  height: 38%;
   border-radius: 50%;
   background: oklch(0.9 0.02 250 / 0.7);
   border: 2px solid oklch(0.7 0.02 250 / 0.6);
@@ -46,18 +46,18 @@
 
 .touch-right {
   position: absolute;
-  right: 24px;
-  bottom: 80px;
+  right: var(--hud-right);
+  bottom: var(--control-bottom);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 16px;
+  gap: clamp(6px, 2vmin, 16px);
   z-index: 1;
 }
 
 .touch-jump {
-  width: 72px;
-  height: 72px;
+  width: clamp(44px, 13vmin, 72px);
+  height: clamp(44px, 13vmin, 72px);
   border-radius: 50%;
   background: oklch(0.2 0.01 250 / 0.5);
   border: 2px solid oklch(0.5 0.02 250 / 0.4);
@@ -76,8 +76,8 @@
 }
 
 .touch-place {
-  width: 60px;
-  height: 60px;
+  width: clamp(44px, 11vmin, 60px);
+  height: clamp(44px, 11vmin, 60px);
   border-radius: 50%;
   background: oklch(0.25 0.06 140 / 0.5);
   border: 2px solid oklch(0.5 0.08 140 / 0.4);
@@ -97,8 +97,8 @@
 
 .touch-pause {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: var(--hud-top);
+  left: var(--hud-left);
   width: 44px;
   height: 44px;
   border-radius: 8px;
@@ -121,11 +121,6 @@
   .crosshair {
     width: 24px;
     height: 24px;
-  }
-
-  .hotbar .slot {
-    min-width: 48px;
-    height: 48px;
   }
 
   .pause-menu button,

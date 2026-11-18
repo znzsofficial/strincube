@@ -48,9 +48,16 @@ input:focus-visible {
 }
 
 .game-shell {
+  --hud-left: max(10px, env(safe-area-inset-left));
+  --hud-right: max(10px, env(safe-area-inset-right));
+  --hud-top: max(10px, env(safe-area-inset-top));
+  --hud-bottom: max(8px, env(safe-area-inset-bottom));
+  --control-bottom: calc(var(--hud-bottom) + 68px);
+  --stick-size: clamp(76px, 22vmin, 120px);
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background: #000;
   user-select: none;
   overflow: hidden;
@@ -142,10 +149,15 @@ input:focus-visible {
 
 .pause-menu,
 .side-panel {
-  position: absolute;
+  --panel-gutter-x: max(12px, env(safe-area-inset-left), env(safe-area-inset-right));
+  --panel-gutter-y: max(12px, env(safe-area-inset-top), env(safe-area-inset-bottom));
+  position: fixed;
   left: 50%;
-  top: 50%;
-  z-index: var(--z-panel);
+  top: 50dvh;
+  max-width: calc(100% - 2 * var(--panel-gutter-x));
+  max-height: calc(100dvh - 2 * var(--panel-gutter-y));
+  z-index: calc(var(--z-hotbar) + 1);
+  overscroll-behavior: contain;
   transform: translate(-50%, -50%);
   color: var(--menu-ink);
   background: linear-gradient(180deg, oklch(0.19 0.02 250 / 0.98), oklch(0.125 0.017 250 / 0.98));
@@ -159,6 +171,9 @@ input:focus-visible {
   width: min(340px, calc(100vw - 32px));
   padding: 22px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-y: auto;
+  scrollbar-width: thin;
   gap: 12px;
   text-align: center;
 }
@@ -255,6 +270,7 @@ input:focus-visible {
 }
 
 .save-status {
+  overflow-wrap: anywhere;
   color: var(--menu-accent) !important;
   font-weight: 700;
   text-align: center;
@@ -452,6 +468,7 @@ input:focus-visible {
 }
 
 .hud {
+  pointer-events: none;
   position: absolute;
   z-index: var(--z-hud);
   color: var(--menu-ink);
@@ -473,13 +490,13 @@ input:focus-visible {
 }
 
 .top-right {
-  right: 12px;
-  top: 12px;
+  right: var(--hud-right);
+  top: var(--hud-top);
 }
 
 .top-left {
-  left: 12px;
-  top: 12px;
+  left: var(--hud-left);
+  top: var(--hud-top);
 }
 
 .fps-hud {
@@ -502,7 +519,6 @@ input:focus-visible {
 
 .side-panel {
   width: min(430px, calc(100vw - 72px));
-  max-height: calc(100vh - 136px);
   overflow: auto;
   padding: 18px;
   scrollbar-width: thin;
@@ -511,13 +527,19 @@ input:focus-visible {
 
 .mc-inventory {
   width: min(548px, calc(100vw - 48px));
-  max-height: calc(100vh - 136px);
   padding: 18px;
   background: oklch(0.18 0.018 250);
   border-color: oklch(0.28 0.02 250);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+}
+
+.mc-inventory > :not(.inventory-grid) {
+  flex: none;
+}
+
+.mc-inventory > p {
+  overflow-wrap: anywhere;
 }
 
 .side-panel header {
@@ -547,8 +569,9 @@ input:focus-visible {
   border: 1px solid oklch(0.22 0.018 250);
   border-radius: 6px;
   overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 72px;
+  align-content: start;
   scrollbar-width: thin;
   scrollbar-color: oklch(0.3 0.02 250) transparent;
 }
@@ -582,7 +605,7 @@ input:focus-visible {
 
 .inventory-selected {
   display: grid;
-  grid-template-columns: 38px max-content 1fr;
+  grid-template-columns: 38px minmax(0, auto) minmax(8em, 1fr);
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
@@ -594,6 +617,9 @@ input:focus-visible {
 
 .inventory-selected strong {
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventory-selected span:last-child {
@@ -653,11 +679,14 @@ input:focus-visible {
   inset: 0;
   z-index: 40;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(76px, 1fr) auto;
   gap: 8px;
   width: 100vw;
   height: 100dvh;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
+  padding: calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 10px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   color: var(--menu-ink);
   background: linear-gradient(180deg, oklch(0.18 0.018 250), oklch(0.12 0.015 250));
   border: 0;
@@ -721,10 +750,9 @@ input:focus-visible {
 
 .mobile-inventory-hotbar {
   display: grid;
-  grid-template-columns: repeat(9, minmax(34px, 1fr));
+  grid-template-columns: repeat(9, minmax(44px, 1fr));
   gap: 4px;
   padding: 6px;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   overflow-x: auto;
   background: oklch(0.14 0.015 250);
   border: 1px solid oklch(0.24 0.018 250);
@@ -744,8 +772,7 @@ input:focus-visible {
 
 .mobile-inventory-slot {
   width: 100%;
-  min-width: 34px;
-  height: 38px;
+  height: 44px;
   padding: 4px;
   border-radius: 6px;
 }
@@ -766,7 +793,7 @@ input:focus-visible {
 
 .mobile-inventory-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 60px), 1fr));
   align-content: start;
   gap: 6px;
   min-height: 0;
@@ -802,11 +829,15 @@ input:focus-visible {
   inset: 0;
   z-index: 40;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-auto-rows: max-content;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   gap: 10px;
   width: 100vw;
   height: 100dvh;
-  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding: calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 12px);
   color: var(--menu-ink);
   background:
     radial-gradient(circle at 20% 0%, oklch(0.28 0.04 145 / 0.45), transparent 38%),
@@ -861,8 +892,7 @@ input:focus-visible {
 }
 
 .mobile-menu-actions.primary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow-y: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .mobile-menu-settings-button {
@@ -894,7 +924,13 @@ input:focus-visible {
 }
 
 .mobile-menu-actions.secondary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 600px) {
+  .mobile-menu-actions.secondary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .mobile-menu-exit {
@@ -930,7 +966,7 @@ input:focus-visible {
 
 .model-card {
   display: grid;
-  grid-template-columns: 46px 1fr;
+  grid-template-columns: 46px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 9px;
@@ -1066,9 +1102,16 @@ input:focus-visible {
 
 .settings-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 11px;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+.model-panel {
+  grid-template-rows: none;
+  grid-auto-rows: max-content;
+  overflow-y: auto;
 }
 
 .settings-panel-scroll {
@@ -1077,6 +1120,8 @@ input:focus-visible {
   gap: 11px;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
   scrollbar-width: thin;
   scrollbar-color: oklch(0.38 0.026 250) transparent;
 }
@@ -1117,7 +1162,7 @@ input:focus-visible {
   gap: 10px;
   width: 100vw;
   height: 100dvh;
-  padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding: calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 12px);
   color: var(--menu-ink);
   background:
     radial-gradient(circle at 18% 0%, oklch(0.28 0.04 230 / 0.42), transparent 38%),
@@ -1344,6 +1389,10 @@ input:focus-visible {
 }
 
 .held-name {
+  max-width: min(28rem, 80%);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   position: absolute;
   left: 50%;
   bottom: 88px;
@@ -1538,26 +1587,13 @@ input:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .top-right {
-    left: 10px;
-    right: 10px;
-    top: 10px;
-  }
-
-  .top-right {
-    top: 68px;
-    width: max-content;
-  }
-
   .side-panel {
     width: calc(100vw - 24px);
-    max-height: calc(100vh - 174px);
   }
 
   .mc-inventory {
     width: calc(100vw - 20px);
     height: calc(100dvh - 24px);
-    max-height: none;
     padding: 10px;
   }
 
@@ -1568,13 +1604,10 @@ input:focus-visible {
   }
 
   .inventory-grid {
-    grid-template-columns: repeat(6, 38px);
+    grid-template-columns: repeat(auto-fit, 38px);
     gap: 3px;
     padding: 6px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    flex: 1 1 auto;
-    min-height: 190px;
+    min-height: 56px;
   }
 
   .inventory-hotbar {
@@ -1598,7 +1631,7 @@ input:focus-visible {
   }
 
   .inventory-selected {
-    grid-template-columns: 30px 1fr;
+    grid-template-columns: 30px minmax(0, 1fr);
     gap: 6px;
     margin-bottom: 6px;
     padding: 6px;
@@ -1678,8 +1711,6 @@ input:focus-visible {
   }
 
   .pause-menu {
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
     padding: 14px;
     gap: 6px;
     width: min(260px, calc(100vw - 24px));
@@ -1779,13 +1810,53 @@ input:focus-visible {
   }
 }
 
+.game-touch .top-left { left: calc(var(--hud-left) + 52px); }
+.game-touch .hotbar {
+  grid-template-columns: repeat(10, 44px);
+  gap: 4px;
+  padding: 4px;
+  bottom: var(--hud-bottom);
+  left: var(--hud-left);
+  right: var(--hud-right);
+  width: max-content;
+  max-width: calc(100% - var(--hud-left) - var(--hud-right));
+  margin-inline: auto;
+  transform: none;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+}
+.hotbar-touch .slot { width: 44px; height: 44px; }
+.hotbar-touch .inventory-open-slot { position: sticky; right: 0; }
+.game-touch .held-name {
+  bottom: var(--control-bottom);
+  min-width: 0;
+  max-width: calc(100% - 2 * (var(--stick-size) + max(var(--hud-left), var(--hud-right)) + 6px));
+}
+.game-touch .model-edit-status {
+  left: auto;
+  right: var(--hud-right);
+  top: calc(var(--hud-top) + 38px);
+  bottom: auto;
+  transform: none;
+  min-width: 0;
+  max-width: min(240px, 46%);
+}
+/* Leave the reticle and thumb controls clear when a full diagnostics column won't fit. */
+@media (max-height: 560px), (max-width: 760px) {
+  .fps-hud > span:not(:first-child) { display: none; }
+}
+
 /* Title Screen */
 .title-screen {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  height: 100dvh;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   background: oklch(0.12 0.025 260);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .title-screen::before {
@@ -1803,7 +1874,10 @@ input:focus-visible {
   position: relative;
   text-align: center;
   z-index: 1;
-  width: min(760px, calc(100vw - 28px));
+  width: min(760px, 100%);
+  flex: none;
+  /* Centre when there is room; at negative free space start at the scroll origin. */
+  margin-block: auto;
   animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1995,6 +2069,14 @@ input:focus-visible {
 }
 
 /* World Settings */
+.world-creator-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-height: 100%;
+}
+.world-creator-open > :not(.world-settings) { flex: none; }
+
 .world-settings {
   display: flex;
   flex-direction: column;
@@ -2002,8 +2084,9 @@ input:focus-visible {
   border: 1px solid oklch(0.38 0.028 250);
   border-radius: 16px;
   padding: 20px;
-  width: min(700px, calc(100vw - 32px));
-  max-height: min(82vh, 720px);
+  width: min(700px, 100%);
+  min-height: 0;
+  max-height: 720px;
   overflow: hidden;
   box-shadow: var(--panel-glow);
   animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -2056,6 +2139,7 @@ input:focus-visible {
   scrollbar-width: thin;
   scrollbar-color: oklch(0.36 0.026 250) transparent;
 }
+.world-settings > :not(.world-settings-grid) { flex: none; }
 
 .world-settings-section {
   padding: 13px;
@@ -2379,16 +2463,7 @@ input:focus-visible {
   text-align: center;
 }
 
-@media (max-width: 640px) {
-  .title-content.world-creator-open {
-    display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    align-content: start;
-    width: 100vw;
-    height: 100dvh;
-    padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 8px);
-  }
-
+@media (max-width: 640px), (max-height: 700px) {
   .title-content.world-creator-open .title-logo,
   .title-content.world-creator-open .title-subtitle {
     display: none;
@@ -2398,11 +2473,18 @@ input:focus-visible {
     margin-bottom: 8px;
     font-size: 22px;
   }
+}
 
+@media (max-height: 500px) {
+  .title-content:not(.world-creator-open) .title-logo { display: none; }
+  .title-subtitle { margin-bottom: 14px; }
+  .world-settings-header { padding: 8px; margin-bottom: 8px; }
+  .world-create-summary { display: none; } /* Also shown in the header and seed field. */
+}
+
+@media (max-width: 640px) {
+  .title-controls { grid-template-columns: 1fr; }
   .world-settings {
-    width: 100%;
-    max-height: none;
-    height: 100%;
     padding: 12px;
   }
 
@@ -2410,16 +2492,12 @@ input:focus-visible {
     align-items: flex-start;
   }
 
-  .world-mode-grid,
-  .world-density-grid,
-  .world-advanced-controls,
-  .world-settings-actions {
+  .world-advanced-controls {
     grid-template-columns: 1fr;
   }
-
-  .world-settings-actions {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
+  .world-mode-grid { grid-template-columns: 1fr; }
+  .world-density-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .world-settings-actions { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 
   .world-mode-card {
     min-height: 74px;
@@ -2446,6 +2524,13 @@ input:focus-visible {
     width: 100%;
     text-align: left;
   }
+}
+
+/* Very short windows (e.g. a docked keyboard) need one uninterrupted scroll,
+   rather than a pinned header/footer consuming the whole form. */
+@media (max-height: 320px) {
+  .world-creator-open, .world-settings { max-height: none; }
+  .world-settings-grid { overflow: visible; }
 }
 .game-error {
   position: fixed;

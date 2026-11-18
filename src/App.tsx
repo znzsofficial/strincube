@@ -670,7 +670,7 @@ export function App() {
   const loadingWorldMode = worldModeOf(worldGenSettings);
 
   return (
-    <main className={isLoadingScreen ? 'game-shell loading-screen' : 'game-shell'}>
+    <main className={`game-shell${isLoadingScreen ? ' loading-screen' : ''}${isTouch ? ' game-touch' : ''}`}>
       {gameError ? <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>
         : saveError && !saveError.dismissed && <div className="game-error" role="alert"><span>{saveError.message}</span><button type="button" onClick={() => setSaveError({ ...saveError, dismissed: true })}>关闭</button></div>}
       <div

@@ -19,19 +19,19 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
   const lookLastPos = useRef({ x: 0, y: 0 });
   const tapStart = useRef<{ x: number; y: number; time: number } | null>(null);
 
-  const JOYSTICK_RADIUS = 50;
-
   useEffect(() => {
     const joystick = joystickRef.current;
     const lookArea = lookAreaRef.current;
     if (!joystick || !lookArea) return;
 
+    let travel = 1;
     const onJoystickStart = (e: TouchEvent) => {
       e.preventDefault();
       e.stopPropagation();
       const touch = e.changedTouches[0];
       joystickTouchId.current = touch.identifier;
       const rect = joystick.getBoundingClientRect();
+      travel = Math.max(1, (rect.width - (knobRef.current?.offsetWidth ?? 0)) / 2);
       joystickCenter.current = {
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
@@ -45,10 +45,10 @@ export function TouchControls({ onMove, onJump, onLook, onTap, onPlace, onPause 
           const dx = touch.clientX - joystickCenter.current.x;
           const dy = touch.clientY - joystickCenter.current.y;
           const dist = Math.hypot(dx, dy);
-          const clamped = Math.min(dist, JOYSTICK_RADIUS);
+          const clamped = Math.min(dist, travel);
           const angle = Math.atan2(dy, dx);
-          const nx = (Math.cos(angle) * clamped) / JOYSTICK_RADIUS;
-          const ny = (Math.sin(angle) * clamped) / JOYSTICK_RADIUS;
+          const nx = (Math.cos(angle) * clamped) / travel;
+          const ny = (Math.sin(angle) * clamped) / travel;
           onMove(nx, -ny);
           if (knobRef.current) {
             knobRef.current.style.transform = `translate(${Math.cos(angle) * clamped}px, ${Math.sin(angle) * clamped}px)`;
