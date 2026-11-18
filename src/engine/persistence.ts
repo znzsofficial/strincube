@@ -81,8 +81,11 @@ async function write(id: string, data?: WorldSaveData, insertOnly = false) {
       tx.objectStore('metadata').delete(id);
     }
     tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error('存档写入被中止'));
-    tx.onerror = () => reject(tx.error);
+    // A request's error bubbles before the transaction has necessarily set its
+    // own error or finished rolling back. Report the cause only after abort.
+    let requestError: DOMException | null = null;
+    tx.onerror = event => { requestError ??= (event.target as IDBRequest | null)?.error ?? null; };
+    tx.onabort = () => reject(requestError ?? tx.error ?? new Error('存档写入被中止'));
   });
 }
 export const worldSaves = {

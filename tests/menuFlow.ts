@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../src/App';
+import { verifyAutosaveFlow } from './autosaveFlow';
 
 /** Exercise the real App/effects with controllable browser lock-event ordering. */
 export async function verifyMenuFlow(assert: (condition: unknown, label: string) => void) {
@@ -67,6 +68,7 @@ export async function verifyMenuFlow(assert: (condition: unknown, label: string)
     click('回到游戏'); await wait(() => !!locked && !prompt());
     window.dispatchEvent(new Event('blur')); await wait(() => !!host.querySelector('.menu-primary') && !locked);
     assert(!prompt(), '失焦回到暂停菜单而非残留继续提示');
+    await verifyAutosaveFlow(host, click, wait, assert);
     click('返回主菜单'); await wait(() => !!host.querySelector('.title-screen'));
     assert(!locked && !host.querySelector('canvas'), '返回标题释放输入和画布');
   } finally {

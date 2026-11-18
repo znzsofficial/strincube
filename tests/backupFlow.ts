@@ -34,14 +34,25 @@ export async function verifyBackupFlow(save: WorldSaveData, assert: (value: unkn
     const link = (await wait(() => host.querySelector<HTMLAnchorElement>('a[download]')))!;
     const blob = await (await fetch(link.href)).blob();
     assert(blob.size > 0 && link.download.endsWith('.strincube'), '标题页可下载包含模型的世界备份');
+    host.querySelector<HTMLElement>('.storage-capacity summary')!.click();
+    await wait(() => /约剩余|未提供容量估算/.test(host.querySelector('.storage-capacity p')?.textContent ?? ''));
+    assert(!host.querySelector<HTMLButtonElement>('.storage-capacity button')?.disabled, '容量估算完成或不可用后仍可刷新和导入');
     let collision = false;
-    try { await worldSaves.insert(original, { ...save, name: 'collision' }); } catch { collision = true; }
+    try { await worldSaves.insert(original, { ...save, name: 'collision' }); }
+    catch (error) { collision = error instanceof DOMException && error.name === 'ConstraintError'; }
     assert(collision && (await worldSaves.get(original))?.data.name === name &&
       (await worldSaves.list()).find(row => row.id === original)?.name === name,
       '新建存档遇到重复标识时回滚，原正文和摘要均不变');
     upload(blob.slice(0, -1));
     await wait(() => host.querySelector('[role="status"]')?.textContent?.includes('导入失败'));
     assert((await worldSaves.list()).filter(s => s.name === name).length === 1, '损坏备份未写入或覆盖已有世界');
+    const insert = worldSaves.insert;
+    try {
+      worldSaves.insert = async () => { throw new DOMException('fixture', 'QuotaExceededError'); };
+      upload(blob);
+      await wait(() => host.querySelector('[role="status"]')?.textContent?.includes('浏览器空间不足'));
+      assert((await worldSaves.list()).filter(s => s.name === name).length === 1, '导入遇到配额不足时保留原世界并提示备份重试');
+    } finally { worldSaves.insert = insert; }
     upload(blob);
     await wait(() => host.querySelector('[role="status"]')?.textContent?.includes('导入为独立存档'));
     const copies = (await worldSaves.list()).filter(s => s.name === name);

@@ -19,6 +19,7 @@ export type GameSettings = {
   modelBrightness: number;
   breakSpeed: number;
   showFps: boolean;
+  autosave: boolean;
   timeOfDay: number;
   infiniteWaterSpread: boolean;
   rendererBackend: 'webgl';

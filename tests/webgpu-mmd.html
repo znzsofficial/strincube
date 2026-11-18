@@ -1,0 +1,4 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>WebGPU · MMD 骨骼与贴图</title>
+<style>body{font:16px/1.5 system-ui;max-width:68em;margin:auto;padding:1rem}#pictures{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem}figure{margin:0}canvas{width:100%;height:auto}pre{overflow:auto}</style></head><body>
+<h1>WebGPU · MMD 骨骼与贴图</h1><p>同一 PMD、相对路径 PNG、三关键帧 VMD：红色跟随根骨，蓝色跟随子骨。比较稳定 WebGL 与基础漫反射节点材质；不测试 MMD 自阴影或描边。</p>
+<button id="run" disabled>运行验证</button> <output id="status" aria-live="polite">加载中</output><div id="pictures"></div><pre id="result"></pre><script type="module" src="./mmdWebgpu/verify.ts"></script></body></html>

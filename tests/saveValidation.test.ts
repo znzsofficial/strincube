@@ -66,7 +66,7 @@ test('rejects incompatible versions, settings and positions before runtime const
     ['seed', { seed: '42' }], ['savedAt', { savedAt: Infinity }], ['activeSlot', { activeSlot: 1 }],
     ['hotbar', { hotbar: new Array(2) }], ['hotbar', { hotbar: [{ type: 'block', block: 'fake' }] }],
     ['worldGen.oreDensity', { worldGen: { ...save().worldGen, oreDensity: 'heavy' } }],
-    ...Object.entries({ moveSpeed: 1e20, shadows: 'false', pixelRatio: -1, filmNoise: NaN, rendererBackend: 'webgpu',
+    ...Object.entries({ moveSpeed: 1e20, shadows: 'false', autosave: 'false', pixelRatio: -1, filmNoise: NaN, rendererBackend: 'webgpu',
       shadowResolution: 513, shadowRange: 1, shadowUpdateHz: 0 }).map(([k, v]) => [`settings.${k}`, { settings: { [k]: v } }]),
     ...Object.entries({ x: 1e40, y: -1e18, z: Infinity, pitch: null, yaw: NaN }).map(([k, v]) =>
       [`player.${k}`, { engineData: { ...save().engineData, player: { ...save().engineData.player, [k]: v } } }]),

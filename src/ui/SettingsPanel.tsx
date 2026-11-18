@@ -1,5 +1,6 @@
 import { Box, Cuboid, Eye, Gauge, Hammer, Moon, Settings, Sun, UserRound } from 'lucide-react';
 import type { GameSettings } from '../engine/types';
+import { AUTOSAVE_INTERVAL_MS } from '../saveCoordinator';
 import { matchingQualityPreset, qualityPreset, type QualityPreset } from '../engine/quality';
 
 interface SettingsPanelProps {
@@ -15,6 +16,8 @@ export function SettingsPanel({ isMobile = false, settings, onReturnToMenu, onUp
     <section className={isMobile ? 'mobile-settings-panel settings-panel' : 'side-panel settings-panel'} aria-label="设置">
       <header><Settings size={18} aria-hidden="true" /> 设置</header>
       <div className="settings-panel-scroll">
+      <label className="toggle-row"><input type="checkbox" aria-label="自动保存" checked={settings.autosave} onChange={event => onUpdateSetting('autosave', event.target.checked)} /> 自动保存 · 每 {AUTOSAVE_INTERVAL_MS / 1000} 秒</label>
+      <p className="quality-hint">每个世界默认关闭。开关随世界保存；离开前可手动保存最新进度。</p>
       <label className="quality-preset"><Eye size={15} aria-hidden="true" /> 画质预设
         <select aria-label="画质预设" value={matchingQualityPreset(settings)} onChange={event => {
           if (event.target.value !== 'custom') onUpdateSettings(qualityPreset(event.target.value as QualityPreset));

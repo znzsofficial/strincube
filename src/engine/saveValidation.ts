@@ -70,7 +70,7 @@ const settingChecks: Record<keyof GameSettings, Check> = {
   daySpeed: range(0, 1), breakSpeed: range(0, 100), timeOfDay: unit, viewDistance: range(1, 256),
   pixelRatio: v => finite(v) && v > 0 && v <= 4, modelBrightness: range(0, 10),
   shadows: bool, shadowResolution: oneOf(512, 1024, 2048), shadowRange: range(16, 96), shadowUpdateHz: range(1, 60),
-  showFps: bool, infiniteWaterSpread: bool, rendererBackend: oneOf('webgl'), postProcessing: bool,
+  showFps: bool, autosave: bool, infiniteWaterSpread: bool, rendererBackend: oneOf('webgl'), postProcessing: bool,
   bloomStrength: range(0, 10), vignette: bool, vignetteDarkness: range(0, 10),
   filmGrain: bool, filmNoise: range(0, 10), filmScanlines: range(0, 10),
 };

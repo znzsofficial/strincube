@@ -2,6 +2,8 @@ import { Cuboid } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { WorldGenSettings } from '../engine/types';
 import type { SaveMeta } from '../saveStorage';
+import { quotaExceeded } from '../storageCapacity';
+import { StorageCapacity } from './StorageCapacity';
 
 type WorldMode = 'infinite' | 'finite' | 'flat';
 
@@ -84,7 +86,7 @@ export function TitleScreen({
         setMessage('备份已准备好。');
       }
     } catch (error) {
-      const reason = error instanceof DOMException && error.name === 'QuotaExceededError' ? '浏览器空间不足。' : error instanceof Error ? error.message : String(error);
+      const reason = quotaExceeded(error) ? '浏览器空间不足。已有世界未改变，请先导出备份，再释放空间重试。' : error instanceof Error ? error.message : String(error);
       setMessage(`${importing ? '导入' : '导出'}失败：${reason}`);
     } finally { locked.current = false; setBusy(false); }
   }
@@ -291,6 +293,7 @@ export function TitleScreen({
               <button type="button" className="world-backup-btn" disabled={busy} onClick={() => fileInput.current?.click()}>导入世界备份</button>
               <small>恢复为新存档，保留已有世界。</small>
               {message && <div role="status">{message} {url && download && <a href={url} download={download.filename}>下载备份</a>}</div>}
+              <StorageCapacity revision={saveMetaList} />
             </div>
             <div className="title-controls">
               <div className="title-controls-row">

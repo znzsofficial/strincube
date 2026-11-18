@@ -328,6 +328,10 @@ input:focus-visible {
 .world-backup-tools { display: grid; justify-items: center; gap: 6px; margin-top: 12px; font-size: 13px; }
 .world-backup-tools [role='status'] { max-width: 100%; overflow-wrap: anywhere; }
 .world-backup-tools a { color: var(--menu-accent); }
+.storage-capacity { max-width: 32em; font-size: 0.8125rem; }
+.storage-capacity summary { cursor: pointer; padding: 0.5em; }
+.storage-capacity p { margin: 0.3em 0; font-variant-numeric: tabular-nums; }
+.storage-capacity small { display: block; margin-bottom: 0.5em; }
 .world-select-info .backup-imported { color: var(--menu-accent); }
 .world-backup-btn:focus-visible, .world-backup-tools a:focus-visible { outline: 2px solid var(--menu-accent); }
 

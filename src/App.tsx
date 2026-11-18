@@ -31,6 +31,8 @@ import { SettingsPanel } from './ui/SettingsPanel';
 import { defaultSettings } from './engine/core/session';
 import { TitleScreen } from './ui/TitleScreen';
 import { deleteSaveData, getSaveMetaList, loadSaveData, storeSaveData, type SaveMeta } from './saveStorage';
+import { AUTOSAVE_INTERVAL_MS, SaveCoordinator } from './saveCoordinator';
+import { formatSaveWriteError } from './storageCapacity';
 import {
   initialHotbarItems,
   inventoryItemLabel,
@@ -38,6 +40,7 @@ import {
 } from './ui/inventoryUi';
 
 const directoryInputProps = { webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>;
+const saves = new SaveCoordinator(storeSaveData, getSaveMetaList);
 type Overlay = 'menu' | 'inventory' | 'settings' | 'model' | 'file' | null;
 type GameScreen = 'title' | 'loading' | 'game';
 type WorldMode = 'infinite' | 'finite' | 'flat';
@@ -95,12 +98,15 @@ export function App() {
   const [showAdvancedWorldSettings, setShowAdvancedWorldSettings] = useState(false);
   const [saveMetaList, setSaveMetaList] = useState<SaveMeta[]>([]);
   const [gameError, setGameError] = useState('');
-  const savingRef = useRef(false);
+  const saveRevision = useRef(0);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveError, setSaveError] = useState<{ message: string; dismissed?: boolean } | null>(null);
   useEffect(() => {
+    if (screen !== 'title') return;
     let cancelled = false;
     getSaveMetaList().then(list => { if (!cancelled) setSaveMetaList(list); }).catch(error => { if (!cancelled) setGameError(`无法读取存档：${String(error)}`); });
     return () => { cancelled = true; };
-  }, []);
+  }, [screen]);
   useEffect(() => () => { runtimeEpoch.current++; gameRef.current?.dispose(); gameRef.current = null; }, []);
   const [saveStatus, setSaveStatus] = useState('');
   const [snapshot, setSnapshot] = useState<GameSnapshot>({
@@ -195,7 +201,6 @@ export function App() {
     setModelItems([]);
     loadingRequestRef.current = { type: 'new' };
     pendingSaveRef.current = null;
-    currentSaveIdRef.current = null;
     setShowWorldSettings(false);
     setScreen('loading');
     const r = getWorldRadius(worldGenSettings);
@@ -203,45 +208,58 @@ export function App() {
     setLoadingProgress({ label: mode === 'finite' ? `准备创建世界 · 半径 ${r} 格` : '准备创建世界 · 区块生成', progress: 0 });
   }
 
-  async function saveGame() {
+  async function saveGame(auto = false) {
     const game = gameRef.current;
-    if (!game || savingRef.current) return;
-    savingRef.current = true;
-    setSaveStatus('保存中…');
+    if (!game || (auto && !game.getSettings().autosave)) return;
+    const revision = ++saveRevision.current;
+    const isLatest = () => gameRef.current === game && revision === saveRevision.current;
+    const label = auto ? '自动保存' : '保存';
+    setSaveBusy(true);
     try {
-      const now = new Date();
-      const data = game.save('');
-      const id = currentSaveIdRef.current ?? `next_${crypto.randomUUID()}`;
-      const name = saveMetaList.find(meta => meta.id === id)?.name ?? `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-      data.name = name;
+      // Reserve the ID and display name before the first asynchronous write,
+      // including on a failed first attempt. Restored worlds keep their own identity.
+      if (!saveIdentity.current) {
+        const now = new Date();
+        saveIdentity.current = { id: `next_${crypto.randomUUID()}`, name: `存档 ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}` };
+      }
+      const { id, name } = saveIdentity.current;
+      setSaveStatus(saves.busy(id) ? '已排队，稍后写入最新进度…' : `${label}中…`);
+      const data = game.save(name);
       data.hotbar = hotbarItemsRef.current.map(item =>
         item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', modelId: item.model.id }
       );
       data.activeSlot = activeSlotRef.current;
-      await storeSaveData(id, data);
-      if (gameRef.current !== game) return;
-      currentSaveIdRef.current = id;
-      try {
-        const list = await getSaveMetaList();
-        if (gameRef.current !== game) return;
-        setSaveMetaList(list);
-      } catch {
-        if (gameRef.current === game) setSaveStatus('世界已保存，存档列表刷新失败。');
-        return;
+      const savedAt = data.savedAt;
+      const result = await saves.request(id, data);
+      if (!isLatest()) return;
+      if (result.status === 'write-failed') throw result.error;
+      setSaveError(null);
+      if (result.status === 'committed-list-failed') setSaveStatus('世界已保存，存档列表刷新失败。');
+      else {
+        setSaveMetaList(result.list);
+        setSaveStatus(`已${label} · ${new Date(savedAt).toLocaleTimeString()}`);
       }
-      setSaveStatus('已保存');
-      window.setTimeout(() => { if (gameRef.current === game) setSaveStatus(s => s === '已保存' ? '' : s); }, 2000);
     } catch (error) {
-      if (gameRef.current !== game) return;
-      setSaveStatus('保存失败');
-      setGameError(`保存失败，请保留当前页面并重试：${error instanceof Error ? error.message : String(error)}`);
-    } finally { savingRef.current = false; }
+      if (!isLatest()) return;
+      setSaveStatus(`${label}失败`);
+      setSaveError({ message: `${label}失败：${formatSaveWriteError(error)}` });
+    } finally {
+      // Snapshot creation can fail while an earlier request still owns the lane.
+      if (isLatest() && saveIdentity.current && saves.busy(saveIdentity.current.id)) await saves.whenIdle(saveIdentity.current.id);
+      if (isLatest()) setSaveBusy(false);
+    }
   }
+
+  useEffect(() => {
+    if (screen !== 'game' || !settings.autosave) return;
+    const game = gameRef.current;
+    const timer = window.setInterval(() => { if (gameRef.current === game) void saveGame(true); }, AUTOSAVE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [screen, settings.autosave]);
 
   function loadGameFromId(id: string) {
     setGameError('');
     loadingRequestRef.current = { type: 'save', id };
-    currentSaveIdRef.current = id;
     setScreen('loading');
     setLoadingProgress({ label: '加载存档 · 读取数据', progress: 0 });
   }
@@ -252,6 +270,8 @@ export function App() {
   }
 
   function returnToTitle() {
+    if (saveIdentity.current && saves.busy(saveIdentity.current.id)) return;
+    if (saveError && !window.confirm('最新进度保存失败。仍要放弃未保存的进度并返回主菜单吗？')) return;
     runtimeEpoch.current++;
     if (gameRef.current) {
       gameRef.current.dispose();
@@ -259,16 +279,16 @@ export function App() {
     }
     pendingSaveRef.current = null;
     loadingRequestRef.current = null;
-    currentSaveIdRef.current = null;
+    saveIdentity.current = null;
+    setSaveStatus(''); setSaveError(null); setSaveBusy(false);
     setOverlayState('menu');
     isLockedRef.current = false;
-    void getSaveMetaList().then(setSaveMetaList).catch(error => setGameError(`无法读取存档：${String(error)}`));
     setScreen('title');
   }
 
   const pendingSaveRef = useRef<WorldSaveData | null>(null);
   const loadingRequestRef = useRef<LoadingRequest | null>(null);
-  const currentSaveIdRef = useRef<string | null>(null);
+  const saveIdentity = useRef<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (screen !== 'loading' || !mountRef.current) return;
@@ -285,10 +305,11 @@ export function App() {
 
       try {
         if (loadingRequest.type === 'save') {
+          await saves.whenIdle(loadingRequest.id);
+          if (cancelled) return;
           const data = await loadSaveData(loadingRequest.id);
           if (cancelled) return;
           if (!data) throw new Error('找不到存档或存档内容已损坏');
-          currentSaveIdRef.current = loadingRequest.id;
           pendingSaveRef.current = data;
           if (data.worldGen) {
             effectiveWorldGen = data.worldGen;
@@ -337,17 +358,16 @@ export function App() {
         const pendingSave = pendingSaveRef.current;
         pendingSaveRef.current = null;
         loadingRequestRef.current = null;
+        saveIdentity.current = pendingSave && loadingRequest.type === 'save' ? { id: loadingRequest.id, name: pendingSave.name } : null;
         if (pendingSave) {
           setModelItems(pendingSave.importedModels);
-          if (pendingSave.hotbar.length > 0) {
-            const restored: InventoryItem[] = pendingSave.hotbar.map(item =>
-              item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', model: { id: item.modelId, name: item.modelId, kind: 'generic' } }
-            );
-            hotbarItemsRef.current = restored;
-            setHotbarItems(restored);
-            activeSlotRef.current = pendingSave.activeSlot;
-            setActiveSlot(pendingSave.activeSlot);
-          }
+          const restored: InventoryItem[] = pendingSave.hotbar.length ? pendingSave.hotbar.map(item =>
+            item.type === 'block' ? { type: 'block', block: item.block } : { type: 'model', model: pendingSave.importedModels.find(m => m.id === item.modelId)! }
+          ) : initialHotbarItems;
+          hotbarItemsRef.current = restored;
+          setHotbarItems(restored);
+          activeSlotRef.current = pendingSave.activeSlot;
+          setActiveSlot(pendingSave.activeSlot);
         }
         if (cancelled) { createdGame.dispose(); return; }
         const nextSettings = createdGame.getSettings();
@@ -455,6 +475,7 @@ export function App() {
   }
 
   function selectHotbarSlot(slot: number) {
+    if (!hotbarItemsRef.current[slot]) return;
     activeSlotRef.current = slot;
     setActiveSlot(slot);
     selectItem(hotbarItemsRef.current[slot]);
@@ -591,6 +612,8 @@ export function App() {
   }
 
   const isNight = snapshot.timeOfDay > 0.58;
+  const autosaveMode = settings.autosave ? `自动保存：每 ${AUTOSAVE_INTERVAL_MS / 1000} 秒` : '自动保存已关闭';
+  const pauseSaveStatus = saveStatus ? `${autosaveMode} · ${saveStatus}` : autosaveMode;
   const heldItem = hotbarItems[activeSlot];
   const selectedModel = snapshot.selectedModelSettings;
   const worldMode = worldModeOf(worldGenSettings);
@@ -648,7 +671,8 @@ export function App() {
 
   return (
     <main className={isLoadingScreen ? 'game-shell loading-screen' : 'game-shell'}>
-      {gameError && <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>}
+      {gameError ? <div className="game-error" role="alert"><span>{gameError}</span><button type="button" onClick={() => setGameError('')}>关闭</button></div>
+        : saveError && !saveError.dismissed && <div className="game-error" role="alert"><span>{saveError.message}</span><button type="button" onClick={() => setSaveError({ ...saveError, dismissed: true })}>关闭</button></div>}
       <div
         ref={mountRef}
         className="game-canvas"
@@ -691,11 +715,12 @@ export function App() {
 
       {isTouch && !snapshot.isDead && overlay === 'menu' && (
         <MobilePauseMenu
-          saveStatus={saveStatus}
+          saveBusy={saveBusy}
+          saveStatus={pauseSaveStatus}
           onContinue={enterTouchFullscreen}
           onOpenInventory={() => openOverlayPanel('inventory')}
           onOpenSettings={() => openOverlayPanel('settings')}
-          onSave={saveGame}
+          onSave={() => void saveGame()}
           onImportModel={() => openFilePicker(fileInputRef.current)}
           onImportMmdFolder={() => openFilePicker(folderInputRef.current)}
           onReturnToTitle={returnToTitle}
@@ -704,14 +729,15 @@ export function App() {
 
       {!isTouch && !snapshot.isLocked && !snapshot.isDead && overlay === 'menu' && (
         <DesktopPauseMenu
-          saveStatus={saveStatus}
+          saveBusy={saveBusy}
+          saveStatus={pauseSaveStatus}
           onContinue={requestGameLock}
           onImportMmdFolder={() => openFilePicker(folderInputRef.current)}
           onImportModel={() => openFilePicker(fileInputRef.current)}
           onOpenInventory={() => openOverlayPanel('inventory')}
           onOpenSettings={() => openOverlayPanel('settings')}
           onReturnToTitle={returnToTitle}
-          onSave={saveGame}
+          onSave={() => void saveGame()}
         />
       )}
 

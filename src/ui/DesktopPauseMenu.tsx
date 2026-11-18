@@ -2,6 +2,7 @@ import { Cuboid } from 'lucide-react';
 
 interface DesktopPauseMenuProps {
   saveStatus: string;
+  saveBusy: boolean;
   onContinue: () => void;
   onImportMmdFolder: () => void;
   onImportModel: () => void;
@@ -13,6 +14,7 @@ interface DesktopPauseMenuProps {
 
 export function DesktopPauseMenu({
   saveStatus,
+  saveBusy,
   onContinue,
   onImportMmdFolder,
   onImportModel,
@@ -31,12 +33,12 @@ export function DesktopPauseMenu({
         <button type="button" onClick={onOpenSettings}><iconify-icon icon="lucide:settings" width="16"></iconify-icon> 设置</button>
       </div>
       <button type="button" className="menu-secondary" onClick={onSave}><iconify-icon icon="lucide:save" width="16"></iconify-icon> 保存游戏</button>
-      {saveStatus && <p className="save-status">{saveStatus}</p>}
+      <p className="save-status" role="status">{saveStatus}</p>
       <div className="pause-menu-grid compact">
         <button type="button" onClick={onImportModel}><iconify-icon icon="lucide:upload" width="16"></iconify-icon> 模型</button>
         <button type="button" onClick={onImportMmdFolder}><iconify-icon icon="lucide:folder-open" width="16"></iconify-icon> MMD</button>
       </div>
-      <button type="button" className="back-button" onClick={onReturnToTitle}><iconify-icon icon="lucide:log-out" width="16"></iconify-icon> 返回主菜单</button>
+      <button type="button" className="back-button" disabled={saveBusy} onClick={onReturnToTitle}><iconify-icon icon="lucide:log-out" width="16"></iconify-icon> 返回主菜单</button>
       <p>Esc 菜单，E 背包，O 设置，M 导入模型，选中模型后靠近按 F</p>
     </section>
   );

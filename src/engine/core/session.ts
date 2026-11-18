@@ -28,6 +28,7 @@ export function defaultSettings(pixelRatio = 1): GameSettings {
     modelBrightness: 0.78,
     breakSpeed: 1,
     showFps: false,
+    autosave: false,
     timeOfDay: 0.28,
     infiniteWaterSpread: false,
     rendererBackend: 'webgl',
