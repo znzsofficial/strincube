@@ -34,6 +34,11 @@ automatically; the application reads only its IndexedDB saves.
   apply a new generator to an older delta save. Format v3 and generator identity are
   separate contracts.
 - Rendering observes world data; selection and collisions do not read meshes.
+- Runtime render adapters retain scene and camera identity. If an experimental
+  backend loses its device, retire renderer-owned resources only. Switch the
+  retained perspective camera back to WebGL clip coordinates before the first
+  fallback frame, and rebind input without inheriting a pointer lock or held action.
+  Production must not statically import the experimental WebGPU implementation.
 - Mesh neighbor caches are scoped to one rebuild, never persisted across chunk
   eviction. Postprocessing owns its render targets and releases them when disabled.
   Use `/tests/performance.html` for fixed-scene measurements; distinguish CPU time,

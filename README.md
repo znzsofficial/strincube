@@ -12,8 +12,8 @@ StrinCube is a Minecraft-like voxel sandbox built with Three.js, React, and Type
 - [Deployment record](docs/DEPLOYMENT.md): production release and publishing procedure.
 - [Remaining work](docs/ROADMAP.md): prioritized tasks and acceptance criteria.
 
-The 2026-11-18 stable WebGL release is deployed as `80162abe`. Its verification completed with
-81 Node tests, 104 browser assertions and a production build; see the deployment
+The stable WebGL watershed release is deployed as `dde2dab5`. Its verification completed with
+96 Node tests, 107 browser assertions and a production build; see the deployment
 record for source-control status and online smoke-test results.
 
 ## Current Highlights
@@ -47,6 +47,15 @@ Run `npm test` with Node 22.18+ for core regression checks. The development rout
 - **Desktop and mobile play**: pointer-lock controls on desktop and touch controls on mobile.
 
 ## Controls
+
+To swim, look down or up while moving forward, or use
+jump to rise. Submerging the camera shortens visibility and tints daylight; deep
+water is darker than shallow water. Flowing water uses its visible surface height.
+
+Equip a cat treat (ordinary or purple) and walk near
+a roaming creature: it follows the treat and stops a short distance away. Switch
+items to let it wander back. Try the time slider around 06:00 and 18:00 for the
+new sunrise and dusk lighting.
 
 | Input | Action |
 | --- | --- |
@@ -112,8 +121,16 @@ the tab, save manually and wait for confirmation if you need the latest edits.
 World generation combines continental and climate noise, mountain masks, fixed-datum
 river valleys and continuous 3D cave noise. Beaches require adjacent water; trees
 use global anchors and a halo so neighboring chunk load order does not change them.
-Generation is versioned independently of the save format. Branching drainage networks
-and erosion simulation are not implemented.
+The generator plans branching tributaries and terminal lakes, then
+samples riverbeds, terraces and inland ridges. Finite worlds use an island-scale
+coastline. Save format and generator identity are independent. Copy a world's seed
+by clicking its seed label in the save list; matching world settings and generator
+version are also needed to reproduce its terrain.
+
+New worlds use `terrain-watershed-2`: low riverbanks have small, walk-through pebble
+piles, woodland has ferns and mushrooms, and meadows have flower patches. The
+crosshair picks individual stone shapes or passes through gaps to the ground behind.
+Previously saved worlds continue using their recorded generator.
 
 ## Project Structure
 
@@ -152,6 +169,11 @@ docs/                   Architecture, verification, measurements and roadmap
 - [@yohawing/three-mmd-loader](https://github.com/yohawing/three-mmd-loader) for MMD support
 
 ## Assets
+
+The meadow set (grass cap, side and exposed earth) is original pixel
+art in `src/assets/terrain/`. Edit the 16×16 palette drawings in
+`scripts/paint-meadow.py` and rasterize them with Python; the game loads the PNGs
+directly. The grass side shares the dirt drawing below its uneven fringe.
 
 Block textures use [Pixel Perfection Legacy](https://www.planetminecraft.com/texture-pack/pixel-perfection-legacy/), a free Minecraft resource pack. Some item, torch, lantern, frame, and coin-style textures are generated or provided in the project assets.
 

@@ -6,8 +6,21 @@ Cloudflare Pages project: `strincube`, production branch: `master`.
 
 - Production: https://strincube.pages.dev
 - Custom domain: https://game.nekolaska.vip
-- Current deployment (2026-11-18): https://80162abe.strincube.pages.dev
-- Previous stable deployment: https://cb479810.strincube.pages.dev
+- Current deployment: https://dde2dab5.strincube.pages.dev
+- Previous stable deployment: https://80162abe.strincube.pages.dev
+
+## 2026-11-18 — watershed worlds and building feedback
+
+Application source: [`5b20ad5`](https://github.com/znzsofficial/strincube/commit/5b20ad5).
+New worlds use `terrain-watershed-2`; earlier supported terrain profiles remain
+available when loading saves. This release adds riverbank/forest/meadow detail,
+per-stone picking and outlines, original terrain tiles, contact lighting, edit
+particles, creature lures, swimming and underwater fog. Production uses WebGL.
+
+`npm test` (96 tests), 107 browser assertions and the production build passed.
+Both production domains returned `index-BJyrPWGi.js` and `index-pFwEY8Pu.css`;
+creating a world on the Pages domain reached the ready-to-play screen. Keep a
+portable backup: the previous deployment cannot load the new terrain generator ID.
 
 ## 2026-11-18 — backups and autosave
 

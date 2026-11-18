@@ -1,10 +1,19 @@
 # Remaining work
 
-Planning baseline: stable WebGL deployment `80162abe` (2026-11-18), source `f79c748`.
+Planning baseline: stable WebGL watershed deployment `dde2dab5`, source `5b20ad5`.
 This is the repository's handoff checklist; update it when acceptance is completed.
 Deployment authorization does not imply authorization to commit or push source.
 
 ## Recommended next iteration
+
+Prioritize additions players can try immediately: creature interactions, more
+distinctive landscapes, and visual upgrades with a modest frame cost. Use play
+sessions (exploring, building and editing), not edge-case coverage, to pick the
+next performance target.
+
+Lead with familiar Minecraft-style play and natural lighting. The development
+water pass couples pitch-directed swimming to depth-dependent fog and daylight;
+the Strinova-inspired traversal ideas remain optional experiments.
 
 1. **Establish the comparison point.** Preserve the release/source relationship
    described below. On a desktop GPU and physical phone, run the existing WebGL
@@ -45,7 +54,7 @@ select a different backend.
 - [x] Separate terrain/mesh Workers, bounded queues, stale rejection and failure fallback.
 - [x] Material atlas batching, shadow refresh budgets and low/medium/high quality presets.
 - [x] Menu/input race fixes, performance diagnostics and repeated WebGL restoration.
-- [x] 81 Node tests, 104 browser assertions, production build and online world-creation smoke.
+- [x] 96 Node tests, 107 browser assertions, production build and online world-creation smoke.
 - [x] Production deployment; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Source archival
@@ -114,12 +123,17 @@ report CPU, GPU, draw counts and frame intervals separately. Compare against
 
 ## Terrain appearance
 
-- [ ] Branching/converging rivers, more natural biome transitions and additional structures.
+Design and baseline: [地图生成器设计](TERRAIN-DESIGN.md). The development default now
+uses regional drainage; `/tests/watershed.html` compares old and new maps and supports walking at selected coordinates.
+
+- [x] Regional drainage, converging tributaries, terminal lakes and buildable terraces.
+- [ ] Further biome transitions and additional structures.
 - [ ] Fixed-seed visual acceptance for coastlines, valleys, caves, trees and transitions.
 
 Acceptance: deterministic output and cross-chunk consistency remain intact. Any
 released generation-output change updates `GENERATOR`; do not silently regenerate
-existing delta saves with a different algorithm. The current ID is `terrain-v2.1`.
+existing delta saves with a different algorithm. New worlds use `terrain-watershed-2`;
+v2.1/v2.2 saves and historical fixed-geometry benchmarks keep their original profiles.
 
 ## Scope retained
 
@@ -133,6 +147,13 @@ the stable WebGL renderer after an initialization failure. The fixture adds a po
 to the fixed world; its 101,564 triangles are not the main benchmark's 101,482.
 Real MMD materials, shadows, postprocessing and gameplay/device-loss lifecycle
 remain gates for a player-facing backend selector.
+
+Controlled device loss after native drawing now falls back successfully in the
+terrain fixture and in the real game loop with active streaming. Camera, edit
+journal, selected block and existing geometry survive; after a fresh user gesture,
+the replacement canvas supports picking and movement. Remaining gates include
+real-character materials and playback during recovery, effects/shadows, mobile
+device validation, and an explicit UI policy for selecting a backend on world entry.
 
 The development fixture `/tests/webgpu-mmd.html` now exercises a generated PMD
 with two bones, a relative diffuse PNG and a keyed VMD. The standard loader supplies

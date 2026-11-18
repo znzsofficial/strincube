@@ -72,6 +72,36 @@ Localhost, production and per-deployment URLs use separate browser storage.
 
 ## Last completed verification
 
+**Watershed release `dde2dab5`:** 96 Node tests, 107 browser assertions and
+production build passed. Pebble DDA tests cover the top and side surface,
+pointing above the pile, picking through a gap and respecting reach. The live Pages
+site successfully created a world after deployment. See [release history](DEPLOYMENT.md).
+
+`/tests/meadow.html` is a small art review scene: inspect ground tiles and wall
+contacts on a stepped hillside in daylight or dusk, then remove and replace the
+foreground grass block to compare the two edit effects. The scene disables shadow
+maps so the mesh's contact shading can be judged separately from cast shadows.
+
+**Live renderer recovery (development):** open `/tests/webgpu-session.html` in a
+foreground desktop browser. Create the test world and use both requested lock
+gestures. The test places and picks a diamond block through the real runtime,
+forces loss while both stream queues have work, checks the paused camera and edit
+journal, then moves on the replacement canvas. Two runs passed on Chrome 156 / NVIDIA
+Lovelace. In the final run, published chunk groups increased from 36 to 47 while
+the player remained paused for 21 frames. Disposal left zero canvases and no pending
+or subsequently fired animation-frame callbacks. With no native adapter the fixture
+reported `SKIPPED`.
+
+**WebGPU terrain loss checkpoint:** In `/tests/webgpu.html`, choose **原生绘制后销毁设备 → WebGL 恢复**.
+After native atlas rendering, the fixture destroys its own GPUDevice with meshes still
+resident, awaits `device.lost`, disposes the renderer and redraws the same edited World
+on a fresh WebGL canvas. The report must say `recovered`, `lossReason: destroyed`
+and `journalPreserved: true`; lack of native WebGPU cannot pass as recovery. Three
+r187 skips its renderer loss callback for deliberately destroyed devices, hence the
+direct platform promise. Verified 101,564 geometry triangles before and after loss,
+including 72 water triangles. This exercises a controlled loss, not OS/driver resets
+or live input, model and Worker rebinding in a running game.
+
 **2026-11-18 release `80162abe` (source `f79c748`):** 81 Node tests, 104 top-level browser
 assertions and the production build passed. The Chromium menu/autosave subset
 also passed independently (15/15) with real IndexedDB and WebGL. It covers a

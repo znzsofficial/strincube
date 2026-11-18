@@ -11,7 +11,10 @@ Existing localStorage data is not automatically erased or offered in the save li
 Saves have `next_` IDs and live in `strincube-next` IndexedDB. A v3 save stores
 its generator identity, normalized settings, seed, edit journal, player, model
 assets, placements and VMD files. Unknown generator identities fail visibly.
-The current generator is `terrain-v2.1`; save format v3 and IndexedDB schema version
+New worlds use `terrain-watershed-2` with seeded riverbank stones,
+meadow flower patches and forest undergrowth (`groundDetails.ts`). Saved `terrain-watershed-1`, `terrain-v2.1` and
+`terrain-v2.2` worlds retain their original elevation profile on both the
+main thread and terrain worker, including after re-saving. Save format v3 and IndexedDB schema version
 2 are separate contracts. Shadow settings are normalized; this is not a complete
 corrupt-save validation layer.
 
@@ -115,9 +118,11 @@ noise below a protected surface band. Trees use world-grid anchors and a halo, s
 their cross-chunk parts are independent of load order. Density options apply to
 separate feature passes.
 
-There are currently no branching river networks or erosion simulation. The saved
-generator ID makes a future algorithm change explicit rather than altering existing
-worlds unnoticed.
+The current profile routes jittered regional nodes to a lower cardinal neighbor.
+Tributaries can share outlets, and terminal basin nodes carve lakes. Distance to
+each reach shapes banks and buildable terraces before quantization. Finite maps
+use an island-scaled coastline. Shared rasterization exposes cave mouths in rocky
+uplands. See [the design and measurements](TERRAIN-DESIGN.md).
 
 ## Resource and model ownership
 
@@ -128,6 +133,15 @@ to the instance. Model imports and scene restoration are asynchronous and failur
 are reported through the loading/import UI.
 
 ## Current renderer scope
+
+`createGame` uses `RuntimeView` to draw and read counters, not a concrete renderer's
+canvas or `info` layout. The default remains `GameScene`. An injected async
+`viewFactory` lets a development fixture exercise the real game loop with the
+experimental native WebGPU adapter. Both the scene graph and the camera are retained
+when that adapter switches to WebGL; the session, chunk render queue and model system
+are not reconstructed. A canvas replacement clears held input and obsolete lock
+requests before the next simulation step. A terminal display failure stops RAF
+updates and reports an error while the runtime save API remains available.
 
 The runtime uses WebGL with optional FXAA, bloom, vignette, grain and scanlines.
 There is no WebGPU renderer selection. The MMD format/runtime adapter uses 0.8.6.
